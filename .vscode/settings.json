@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        ".\\crates\\solitaire-game\\Cargo.toml"
+    ]
+}
