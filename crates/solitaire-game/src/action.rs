@@ -5,8 +5,6 @@
 pub enum Action {
     /// draw a card from stock
     TurnStock,
-    /// put all cards from talon back into the stock
-    ClearTalon,
     /// Move a card from talon, tableau or foundation to another location
     Move(Coord, Coord),
 }

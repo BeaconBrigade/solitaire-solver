@@ -12,4 +12,5 @@ members = ["crates/solitaire-game"]
 eframe = "0.25.0"
 egui = "0.25.0"
 egui_extras = { version = "0.25.0", features = ["all_loaders"] }
+epaint = "0.25.0"
 solitaire-game = { version = "0.1.0", path = "crates/solitaire-game" }

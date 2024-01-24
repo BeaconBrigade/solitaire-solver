@@ -47,9 +47,9 @@ impl Card {
 
     pub fn has_same_colour(&self, other: &Card) -> bool {
         ((self.suit == Suit::Hearts || self.suit == Suit::Diamonds)
-            && (other.suit == Suit::Clubs || other.suit == Suit::Spades))
+            && (other.suit == Suit::Hearts || other.suit == Suit::Diamonds))
             || ((self.suit == Suit::Clubs || self.suit == Suit::Spades)
-                && (other.suit == Suit::Hearts || other.suit == Suit::Diamonds))
+                && (other.suit == Suit::Clubs || other.suit == Suit::Spades))
     }
 }
 
@@ -62,7 +62,7 @@ pub enum Suit {
     Diamonds,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Value {
     Ace = 1,

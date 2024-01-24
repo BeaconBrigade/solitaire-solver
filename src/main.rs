@@ -1,13 +1,14 @@
 mod image;
+mod tableau;
 
 use eframe::{egui, CreationContext, NativeOptions};
-use egui::{Color32, Frame, Margin, Response, RichText, Vec2, ViewportBuilder};
+use egui::{Color32, Frame, Margin, RichText, Vec2, ViewportBuilder};
 use image::{card_to_image, BACK, BLANK};
-use solitaire_game::action::{Action, Coord, Location};
-use solitaire_game::state::{find_last, find_last_idx};
+use solitaire_game::action::Action;
+use solitaire_game::state::find_last;
 use solitaire_game::Solitaire;
 
-const IMAGE_SIZE: Vec2 = Vec2::new(75.0, 108.9);
+pub const IMAGE_SIZE: Vec2 = Vec2::new(75.0, 108.9);
 
 fn main() -> eframe::Result<()> {
     let opts = NativeOptions {
@@ -38,10 +39,11 @@ impl App {
 }
 
 /// Use less code to build out image buttons
+#[macro_export]
 macro_rules! image_button {
     ($ui:expr, $path:expr) => {
         $ui.add(
-            egui::ImageButton::new(egui::Image::new($path).fit_to_exact_size(IMAGE_SIZE))
+            egui::ImageButton::new(egui::Image::new($path).fit_to_exact_size($crate::IMAGE_SIZE))
                 .frame(false)
                 .sense(egui::Sense::drag()),
         )
@@ -49,7 +51,7 @@ macro_rules! image_button {
     ($ui:expr, $pos:expr, $path:expr) => {
         $ui.put(
             $pos,
-            egui::ImageButton::new(egui::Image::new($path).fit_to_exact_size(IMAGE_SIZE))
+            egui::ImageButton::new(egui::Image::new($path).fit_to_exact_size($crate::IMAGE_SIZE))
                 .frame(false)
                 .sense(egui::Sense::drag()),
         )
@@ -97,7 +99,9 @@ impl eframe::App for App {
                         } else {
                             BACK
                         };
-                    image_button!(ui, top_of_deck);
+                    if image_button!(ui, top_of_deck).clicked() {
+                        self.game.do_move(Action::TurnStock);
+                    }
                     let top_of_talon = if self.game.state.talon.1 < 0 {
                         BLANK.to_string()
                     } else {
@@ -111,44 +115,7 @@ impl eframe::App for App {
 
             // draw the tableau
             ui.add_space(50.0);
-            ui.horizontal(|ui| {
-                for pile in self.game.state.tableau {
-                    ui.vertical(|ui| {
-                        let max_idx = find_last_idx(pile.into_iter(), |c| c.is_some());
-                        let mut iter = pile.into_iter();
-
-                        match max_idx {
-                            Some(0) => {
-                                image_button!(ui, card_to_image(iter.next().flatten().unwrap()));
-                            }
-                            Some(i) => {
-                                // draw card backs up to the top card
-                                let mut last: Option<Response> = None;
-                                for _ in iter.take(i).flatten() {
-                                    match last.take() {
-                                        Some(r) => {
-                                            let mut new = r.rect;
-                                            *new.top_mut() = 20.0 + new.top();
-                                            last = image_button!(ui, new, BACK).into();
-                                        }
-                                        None => {
-                                            last = image_button!(ui, BACK).into();
-                                        }
-                                    }
-                                }
-
-                                let mut new = last.unwrap().rect;
-                                *new.top_mut() = 20.0 + new.top();
-                                // draw top card
-                                image_button!(ui, new, card_to_image(pile[i].unwrap()));
-                            }
-                            None => {
-                                image_button!(ui, BLANK.to_string());
-                            }
-                        };
-                    });
-                }
-            });
+            self.draw_tableau(ui);
         });
     }
 }

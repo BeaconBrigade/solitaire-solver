@@ -1,6 +1,6 @@
 use crate::{
     action::{Action, Coord, Location},
-    deck::{Card, Deck},
+    deck::{Card, Deck, Value},
 };
 
 /// Representation of solitary using [K+ solitaire](https://web.engr.oregonstate.edu/~afern/papers/solitaire.pdf)
@@ -54,23 +54,126 @@ impl State {
     pub fn apply(&self, action: Action) -> Self {
         let mut new = *self;
         match action {
-            Action::TurnStock => new.talon.1 += 1,
-            Action::ClearTalon => new.talon.1 = 0,
+            Action::TurnStock => {
+                println!("turning stock");
+                // make sure the addition doesn't go past 23
+                new.talon.1 = (self.talon.1 + 1) % 23;
+            }
             Action::Move(from, to) => {
+                println!("making a move");
                 // do nothing
                 if from == to {
+                    println!("from is to");
                     return new;
                 }
-                // card can't move through the talon
-                if from.location == Location::Talon && to.location == Location::Talon {
+                // card can't move to the talon
+                if to.location == Location::Talon {
+                    println!("trying to move through talon");
+                    return new;
+                }
+                // can't move within the same column in both the talon or the tableau
+                if from.location == to.location {
+                    println!("trying to move to same column");
                     return new;
                 }
 
                 // make sure from card exists but the to location doesn't
                 let Some(from_item) = self.get(from) else {
+                    println!("no item found at location");
                     return new;
                 };
-                let None = self.get(to) else { return new };
+                let None = self.get(to) else {
+                    println!("card already at new");
+                    return new;
+                };
+                let placement_item = if to.idx > 0 {
+                    let above = Coord::new(to.location, to.idx - 1);
+                    self.get(above)
+                } else {
+                    None
+                };
+
+                // ensure move is valid
+                match to.location {
+                    Location::Foundation(_) => match placement_item {
+                        Some(up) => {
+                            if up.suit != from_item.suit {
+                                println!("tried to move to the foundation with unmatched suits");
+                                return new;
+                            }
+                            if up.value as u8 != from_item.value as u8 - 1 {
+                                println!("tried to move to foundation with unordered numbers");
+                                return new;
+                            }
+                        }
+                        None => {
+                            if from_item.value != Value::Ace {
+                                println!("tried to move non-ace to base of foundation");
+                                return new;
+                            }
+                        }
+                    },
+                    Location::Tableau(_) => {
+                        match placement_item {
+                            Some(up) => {
+                                if up.has_same_colour(&from_item) {
+                                    println!("tried to move card in tableau to same colour");
+                                    return new;
+                                }
+                                if up.value as u8 != from_item.value as u8 + 1 {
+                                    println!("tried to move card in tableau to card not one level higher");
+                                    return new;
+                                }
+                            }
+                            None => {
+                                if from_item.value != Value::King {
+                                    println!("tried to move non-king to empty tableau stack");
+                                    return new;
+                                }
+                            }
+                        }
+                    }
+                    Location::Talon => unreachable!(),
+                }
+
+                // remove item from source
+                match from.location {
+                    Location::Foundation(i) => {
+                        println!("removing source from foundation");
+                        let idx =
+                            find_last_idx(new.foundation[i as usize].into_iter(), |c| c.is_some())
+                                .unwrap();
+                        new.foundation[i as usize][idx] = None;
+                    }
+                    Location::Tableau(i) => {
+                        println!("removing source from tableau");
+                        let idx =
+                            find_last_idx(new.tableau[i as usize].into_iter(), |c| c.is_some())
+                                .unwrap();
+                        new.tableau[i as usize][idx] = None;
+                    }
+                    Location::Talon => {
+                        println!("taking from talon");
+                        // clear the slot
+                        new.talon.0[from.idx as usize] = None;
+                        // rotate to move the None value to the right end of the array
+                        new.talon.0[from.idx as usize..].rotate_left(1);
+                        new.talon.1 -= 1;
+                    }
+                }
+
+                // add item to dest
+                match to.location {
+                    Location::Foundation(i) => {
+                        println!("moving source to foundation");
+                        new.foundation[i as usize][to.idx as usize] = Some(from_item);
+                    }
+                    Location::Tableau(i) => {
+                        println!("moving source to tableau");
+                        new.tableau[i as usize][to.idx as usize] = Some(from_item);
+                    }
+                    Location::Talon => unreachable!(),
+                }
             }
         }
 
