@@ -8,7 +8,7 @@ pub mod state;
 use action::Action;
 use state::State;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Solitaire {
     pub state: State,
 }

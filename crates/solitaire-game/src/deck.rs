@@ -25,7 +25,7 @@ impl Default for Deck {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Card {
     pub suit: Suit,
     pub value: Value,

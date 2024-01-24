@@ -28,13 +28,16 @@ fn main() -> eframe::Result<()> {
 #[derive(Debug)]
 struct App {
     game: Solitaire,
+    original: Solitaire,
 }
 
 impl App {
     pub fn new(cc: &CreationContext) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         let game = Solitaire::default();
-        Self { game }
+        let original = game;
+        println!("{game:#?}");
+        Self { game, original }
     }
 }
 
@@ -77,7 +80,12 @@ impl eframe::App for App {
                     RichText::new("Cool Solitaire Game")
                         .strong()
                         .color(Color32::LIGHT_GRAY),
-                )
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                    if ui.button("Restart").clicked() {
+                        self.game = self.original;
+                    }
+                });
             });
             ui.add_space(10.0);
 

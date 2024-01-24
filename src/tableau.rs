@@ -19,50 +19,85 @@ impl App {
             for (col_idx, pile) in self.game.state.tableau.into_iter().enumerate() {
                 ui.vertical(|ui| {
                     let can_accept_what_is_being_dragged = true;
-                    let max_idx = find_last_idx(pile.into_iter(), |c| c.is_some());
-                    let mut iter = pile.into_iter();
+                    let max_idx = find_last_idx(pile.0.into_iter(), |c| c.is_some());
                     let response = drop_target(ui, can_accept_what_is_being_dragged, |ui| {
                         // draw each card now
                         match max_idx {
                             Some(0) => {
                                 let item_id = Id::new(id_source).with(col_idx).with(0);
                                 drag_source(ui, item_id, |ui| {
-                                    image_button!(
-                                        ui,
-                                        card_to_image(iter.next().flatten().unwrap())
-                                    );
+                                    image_button!(ui, card_to_image(pile.0[0].unwrap()));
                                 });
 
                                 if ui.memory(|mem| mem.is_being_dragged(item_id)) {
                                     source = Some(Coord::new(Location::Tableau(col_idx as _), 0));
                                 }
                             }
-                            Some(i) => {
-                                // draw card backs up to the top card
-                                let mut last: Option<Response> = None;
-                                for _ in iter.take(i).flatten() {
-                                    match last.take() {
+                            Some(last) => {
+                                // draw card backs up
+                                let mut prev: Option<Response> = None;
+                                let face_down_len = (0..pile.1).len();
+                                for _ in pile.0[0..pile.1 as usize].iter().flatten() {
+                                    match prev.take() {
                                         Some(r) => {
                                             let mut new = r.rect;
                                             *new.top_mut() = 20.0 + new.top();
-                                            last = image_button!(ui, new, BACK).into();
+                                            prev = image_button!(ui, new, BACK).into();
                                         }
                                         None => {
-                                            last = image_button!(ui, BACK).into();
+                                            prev = image_button!(ui, BACK).into();
                                         }
                                     }
                                 }
-
-                                let mut new = last.unwrap().rect;
-                                *new.top_mut() = 20.0 + new.top();
-                                // draw top card
-                                let item_id = Id::new(id_source).with(col_idx).with(i);
-                                drag_source(ui, item_id, |ui| {
-                                    image_button!(ui, new, card_to_image(pile[i].unwrap()));
-                                });
-                                if ui.memory(|mem| mem.is_being_dragged(item_id)) {
-                                    source =
-                                        Some(Coord::new(Location::Tableau(col_idx as _), i as _));
+                                // draw the up cards
+                                for (i, _) in
+                                    pile.0[pile.1 as usize..=last].iter().flatten().enumerate()
+                                {
+                                    match prev.take() {
+                                        Some(r) => {
+                                            let mut new = r.rect;
+                                            *new.top_mut() = 20.0 + new.top();
+                                            let item_id =
+                                                Id::new(id_source).with(col_idx).with(last);
+                                            drag_source(ui, item_id, |ui| {
+                                                prev = image_button!(
+                                                    ui,
+                                                    new,
+                                                    // add face_down_len to index starting from face up cards
+                                                    card_to_image(
+                                                        pile.0[i + face_down_len].unwrap()
+                                                    )
+                                                )
+                                                .into();
+                                            });
+                                            if ui.memory(|mem| mem.is_being_dragged(item_id)) {
+                                                source = Some(Coord::new(
+                                                    Location::Tableau(col_idx as _),
+                                                    i as u8 + face_down_len as u8,
+                                                ));
+                                            }
+                                        }
+                                        None => {
+                                            let item_id =
+                                                Id::new(id_source).with(col_idx).with(last);
+                                            drag_source(ui, item_id, |ui| {
+                                                prev = image_button!(
+                                                    ui,
+                                                    // add face_down_len to index starting from face up cards
+                                                    card_to_image(
+                                                        pile.0[i + face_down_len].unwrap()
+                                                    )
+                                                )
+                                                .into();
+                                            });
+                                            if ui.memory(|mem| mem.is_being_dragged(item_id)) {
+                                                source = Some(Coord::new(
+                                                    Location::Tableau(col_idx as _),
+                                                    i as u8 + face_down_len as u8,
+                                                ));
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             None => {
@@ -83,15 +118,15 @@ impl App {
         if let (Some(coord), Some(dest)) = (source, dest) {
             if ui.input(|i| i.pointer.any_released()) {
                 // do the drop:
-                self.game.do_move(Action::Move(
-                    coord,
-                    Coord::new(
-                        Location::Tableau(dest as _),
-                        find_last_idx(self.game.state.tableau[dest].into_iter(), |c| c.is_some())
-                            .map(|i| (i + 1) as u8)
-                            .unwrap_or(0),
-                    ),
-                ));
+                let from = coord;
+                let to = Coord::new(
+                    Location::Tableau(dest as _),
+                    find_last_idx(self.game.state.tableau[dest].0.into_iter(), |c| c.is_some())
+                        .map(|i| (i + 1) as u8)
+                        .unwrap_or(0),
+                );
+                println!("doing move: f({from:?}) - t({to:?})");
+                self.game.do_move(Action::Move(from, to));
             }
         }
     }

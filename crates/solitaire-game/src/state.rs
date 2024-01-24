@@ -1,3 +1,5 @@
+use std::cmp;
+
 use crate::{
     action::{Action, Coord, Location},
     deck::{Card, Deck, Value},
@@ -9,8 +11,10 @@ pub struct State {
     /// There are seven slots in the tableau. A specific slot
     /// can hold up to 19 cards because on the far right slot
     /// six cards are face down (6), and King can be on top(1), and then
-    /// the cards Queen through Ace (12). This totals to 19
-    pub tableau: [[Option<Card>; 19]; 7],
+    /// the cards Queen through Ace (12). This totals to 19.
+    /// The second integer for each pile indicates where face up cards start.
+    /// Every card with a higher or equal index will be face up.
+    pub tableau: [([Option<Card>; 19], u8); 7],
     /// There are four foundation slots each with up to 13 cards
     pub foundation: [[Option<Card>; 13]; 4],
     /// The deck and talon have at most 24 cards. The second
@@ -24,13 +28,13 @@ impl Default for State {
         let mut iter = deck.0.into_iter();
 
         let tableau = [
-            combine(iter_to_arr::<1, _>(&mut iter), [None; 18]),
-            combine(iter_to_arr::<2, _>(&mut iter), [None; 17]),
-            combine(iter_to_arr::<3, _>(&mut iter), [None; 16]),
-            combine(iter_to_arr::<4, _>(&mut iter), [None; 15]),
-            combine(iter_to_arr::<5, _>(&mut iter), [None; 14]),
-            combine(iter_to_arr::<6, _>(&mut iter), [None; 13]),
-            combine(iter_to_arr::<7, _>(&mut iter), [None; 12]),
+            (combine(iter_to_arr::<1, _>(&mut iter), [None; 18]), 0),
+            (combine(iter_to_arr::<2, _>(&mut iter), [None; 17]), 1),
+            (combine(iter_to_arr::<3, _>(&mut iter), [None; 16]), 2),
+            (combine(iter_to_arr::<4, _>(&mut iter), [None; 15]), 3),
+            (combine(iter_to_arr::<5, _>(&mut iter), [None; 14]), 4),
+            (combine(iter_to_arr::<6, _>(&mut iter), [None; 13]), 5),
+            (combine(iter_to_arr::<7, _>(&mut iter), [None; 12]), 6),
         ];
 
         let foundation = [[None; 13], [None; 13], [None; 13], [None; 13]];
@@ -57,7 +61,8 @@ impl State {
             Action::TurnStock => {
                 println!("turning stock");
                 // make sure the addition doesn't go past 23
-                new.talon.1 = (self.talon.1 + 1) % 23;
+                let next = self.talon.1 + 1;
+                new.talon.1 = if next > 23 { -1 } else { next }
             }
             Action::Move(from, to) => {
                 println!("making a move");
@@ -86,6 +91,7 @@ impl State {
                     println!("card already at new");
                     return new;
                 };
+                // get the card from will have to move to
                 let placement_item = if to.idx > 0 {
                     let above = Coord::new(to.location, to.idx - 1);
                     self.get(above)
@@ -117,10 +123,12 @@ impl State {
                         match placement_item {
                             Some(up) => {
                                 if up.has_same_colour(&from_item) {
+                                    println!("wtf: {up:?} - {from_item:?}");
                                     println!("tried to move card in tableau to same colour");
                                     return new;
                                 }
                                 if up.value as u8 != from_item.value as u8 + 1 {
+                                    println!("wth: up({up:?}) from({from_item:?})",);
                                     println!("tried to move card in tableau to card not one level higher");
                                     return new;
                                 }
@@ -146,11 +154,21 @@ impl State {
                         new.foundation[i as usize][idx] = None;
                     }
                     Location::Tableau(i) => {
+                        // ensure from card is face up
+                        if self.tableau[i as usize].1 < from.idx {
+                            println!("trying to move card that's face down");
+                            return new;
+                        }
                         println!("removing source from tableau");
-                        let idx =
-                            find_last_idx(new.tableau[i as usize].into_iter(), |c| c.is_some())
+                        let last_idx =
+                            find_last_idx(new.tableau[i as usize].0.into_iter(), |c| c.is_some())
                                 .unwrap();
-                        new.tableau[i as usize][idx] = None;
+                        // there are multiple cards to move, this will copy None to the correct places
+                        new.tableau[i as usize].0[from.idx as usize..=last_idx].fill(None);
+
+                        // convert to i8 to make sure no overflow errors occur
+                        new.tableau[i as usize].1 =
+                            cmp::max(0, new.tableau[i as usize].1 as i8 - 1) as u8;
                     }
                     Location::Talon => {
                         println!("taking from talon");
@@ -169,21 +187,35 @@ impl State {
                         new.foundation[i as usize][to.idx as usize] = Some(from_item);
                     }
                     Location::Tableau(i) => {
-                        println!("moving source to tableau");
-                        new.tableau[i as usize][to.idx as usize] = Some(from_item);
+                        println!("moving source to tableau ({i})");
+                        // moving from tableau to tableau, we might have to move multiple cards
+                        if let Location::Tableau(from_col) = from.location {
+                            let last_idx =
+                                find_last_idx(self.tableau[from_col as usize].0.into_iter(), |c| {
+                                    c.is_some()
+                                })
+                                .unwrap();
+                            let len = last_idx - from.idx as usize;
+                            let dst = &mut new.tableau[i as usize].0
+                                [to.idx as usize..=to.idx as usize + len];
+                            let src = &self.tableau[from_col as usize].0
+                                [from.idx as usize..=last_idx as _];
+                            dst.copy_from_slice(src);
+                        } else {
+                            new.tableau[i as usize].0[to.idx as usize] = Some(from_item);
+                        }
                     }
                     Location::Talon => unreachable!(),
                 }
             }
         }
-
         new
     }
 
     pub fn get(&self, pos: Coord) -> Option<Card> {
         match pos.location {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize],
-            Location::Tableau(i) => self.tableau[i as usize][pos.idx as usize],
+            Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize],
             Location::Talon => {
                 // ensure card is reachable
                 // if the position idx is greater than the talon cut off, the card should be hidden
@@ -199,7 +231,7 @@ impl State {
     pub fn set(mut self, pos: Coord, val: Option<Card>) -> Self {
         match pos.location {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize] = val,
-            Location::Tableau(i) => self.tableau[i as usize][pos.idx as usize] = val,
+            Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize] = val,
             Location::Talon => {
                 if pos.idx as i8 != self.talon.1 {
                     return self;
