@@ -57,9 +57,8 @@ impl App {
                                         Some(r) => {
                                             let mut new = r.rect;
                                             *new.top_mut() = 20.0 + new.top();
-                                            let item_id =
-                                                Id::new(id_source).with(col_idx).with(last);
-                                            drag_source(ui, item_id, |ui| {
+                                            let item_id = Id::new(id_source).with(col_idx).with(i);
+                                            let delta = drag_source(ui, item_id, |ui| {
                                                 prev = image_button!(
                                                     ui,
                                                     new,
@@ -68,8 +67,13 @@ impl App {
                                                         pile.0[i + face_down_len].unwrap()
                                                     )
                                                 )
-                                                .into();
+                                                .into()
                                             });
+                                            // make sure our last Rect we use to translate the cards underneath, is
+                                            // the properly translated hovered card.
+                                            let prev_rect =
+                                                prev.as_ref().unwrap().rect.translate(delta);
+                                            prev.as_mut().unwrap().rect = prev_rect;
                                             if ui.memory(|mem| mem.is_being_dragged(item_id)) {
                                                 source = Some(Coord::new(
                                                     Location::Tableau(col_idx as _),
@@ -78,9 +82,8 @@ impl App {
                                             }
                                         }
                                         None => {
-                                            let item_id =
-                                                Id::new(id_source).with(col_idx).with(last);
-                                            drag_source(ui, item_id, |ui| {
+                                            let item_id = Id::new(id_source).with(col_idx).with(0);
+                                            let delta = drag_source(ui, item_id, |ui| {
                                                 prev = image_button!(
                                                     ui,
                                                     // add face_down_len to index starting from face up cards
@@ -90,6 +93,9 @@ impl App {
                                                 )
                                                 .into();
                                             });
+                                            let prev_rect =
+                                                prev.as_ref().unwrap().rect.translate(delta);
+                                            prev.as_mut().unwrap().rect = prev_rect;
                                             if ui.memory(|mem| mem.is_being_dragged(item_id)) {
                                                 source = Some(Coord::new(
                                                     Location::Tableau(col_idx as _),
@@ -134,7 +140,7 @@ impl App {
 
 /// drag and drop code stolen from [here](https://github.com/emilk/egui/blob/0.25.0/crates/egui_demo_lib/src/demo/drag_and_drop.rs)
 
-pub fn drag_source(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui)) {
+pub fn drag_source(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui)) -> Vec2 {
     let is_being_dragged = ui.memory(|mem| mem.is_being_dragged(id));
 
     if !is_being_dragged {
@@ -145,11 +151,13 @@ pub fn drag_source(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui)) {
         if response.hovered() {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
+
+        Vec2::ZERO
     } else {
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
 
         // Paint the body to a new layer:
-        let layer_id = LayerId::new(Order::Tooltip, id);
+        let layer_id = LayerId::new(Order::Foreground, id);
         let response = ui.with_layer_id(layer_id, body).response;
 
         // Now we move the visuals of the body to where the mouse is.
@@ -162,6 +170,10 @@ pub fn drag_source(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui)) {
         if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
             let delta = pointer_pos - response.rect.center();
             ui.ctx().translate_layer(layer_id, delta);
+
+            delta
+        } else {
+            Vec2::ZERO
         }
     }
 }

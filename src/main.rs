@@ -46,8 +46,8 @@ impl App {
 macro_rules! image_button {
     ($ui:expr, $path:expr) => {
         $ui.add(
-            egui::ImageButton::new(egui::Image::new($path).fit_to_exact_size($crate::IMAGE_SIZE))
-                .frame(false)
+            egui::Image::new($path)
+                .fit_to_exact_size($crate::IMAGE_SIZE)
                 .sense(egui::Sense::drag()),
         )
     };
@@ -82,7 +82,10 @@ impl eframe::App for App {
                         .color(Color32::LIGHT_GRAY),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                    if ui.button("Restart").clicked() {
+                    if ui
+                        .button(RichText::new("Restart").color(Color32::BLACK))
+                        .clicked()
+                    {
                         self.game = self.original;
                     }
                 });
