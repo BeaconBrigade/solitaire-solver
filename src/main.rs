@@ -1,10 +1,16 @@
 mod image;
 mod tableau;
 
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::str::FromStr;
+
 use eframe::{egui, CreationContext, NativeOptions};
 use egui::{Color32, Frame, Margin, RichText, Vec2, ViewportBuilder};
 use image::{card_to_image, BACK, BLANK};
 use solitaire_game::action::Action;
+use solitaire_game::deck::Deck;
 use solitaire_game::state::find_last;
 use solitaire_game::Solitaire;
 
@@ -34,9 +40,19 @@ struct App {
 impl App {
     pub fn new(cc: &CreationContext) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
-        let game = Solitaire::default();
+        let deck = if let Some(path) = env::args().nth(1) {
+            let mut deck_file = File::open(path).unwrap();
+            let mut contents = String::new();
+            deck_file.read_to_string(&mut contents).unwrap();
+
+            Deck::from_str(&contents).unwrap()
+        } else {
+            Deck::new_shuffled()
+        };
+        println!("{}", deck.to_string());
+        let game = Solitaire::with_deck(deck);
+
         let original = game;
-        println!("{game:#?}");
         Self { game, original }
     }
 }

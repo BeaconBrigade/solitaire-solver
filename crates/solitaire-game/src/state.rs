@@ -24,7 +24,12 @@ pub struct State {
 
 impl Default for State {
     fn default() -> Self {
-        let deck = Deck::new_shuffled();
+        Self::new(Deck::new_shuffled())
+    }
+}
+
+impl State {
+    pub fn new(deck: Deck) -> Self {
         let mut iter = deck.0.into_iter();
 
         let tableau = [
@@ -52,9 +57,7 @@ impl Default for State {
             talon,
         }
     }
-}
 
-impl State {
     pub fn apply(&self, action: Action) -> Self {
         let mut new = *self;
         match action {
