@@ -1,4 +1,4 @@
-use egui::{CursorIcon, Id, InnerResponse, LayerId, Order, Rect, Response, Sense, Ui, Vec2};
+use egui::{CursorIcon, Id, InnerResponse, LayerId, Order, Rect, Sense, Ui, Vec2};
 use solitaire_game::{
     action::{Action, Coord, Location},
     state::find_last_idx,
@@ -20,13 +20,16 @@ impl App {
                 ui.vertical(|ui| {
                     let can_accept_what_is_being_dragged = true;
                     let max_idx = find_last_idx(pile.0.into_iter(), |c| c.is_some());
+                    // make sure rect is initialized as nothing
+                    let mut prev: Rect = Rect::ZERO;
                     let response = drop_target(ui, can_accept_what_is_being_dragged, |ui| {
                         // draw each card now
                         match max_idx {
                             Some(0) => {
+                                prev = image_button!(ui, BLANK.to_string()).rect;
                                 let item_id = Id::new(id_source).with(col_idx).with(0);
                                 drag_source(ui, item_id, |ui| {
-                                    image_button!(ui, card_to_image(pile.0[0].unwrap()));
+                                    image_button!(ui, prev, card_to_image(pile.0[0].unwrap()));
                                 });
 
                                 if ui.memory(|mem| mem.is_being_dragged(item_id)) {
@@ -35,101 +38,58 @@ impl App {
                             }
                             Some(last) => {
                                 // draw card backs up
-                                let mut prev: Option<Response> = None;
+                                prev = image_button!(ui, BLANK.to_string()).rect;
+                                *prev.top_mut() = prev.top() - 20.0;
                                 let face_down_len = (0..pile.1).len();
                                 for _ in pile.0[0..pile.1 as usize].iter().flatten() {
-                                    match prev.take() {
-                                        Some(r) => {
-                                            let mut new = r.rect;
-                                            *new.top_mut() = 20.0 + new.top();
-                                            prev = image_button!(ui, new, BACK).into();
-                                        }
-                                        None => {
-                                            prev = image_button!(ui, BACK).into();
-                                        }
-                                    }
+                                    let mut new = prev;
+                                    *new.top_mut() = 20.0 + new.top();
+                                    prev = image_button!(ui, new, BACK).rect;
                                 }
                                 // draw the up cards
                                 let mut dragged = false;
                                 for (i, _) in
                                     pile.0[pile.1 as usize..=last].iter().flatten().enumerate()
                                 {
-                                    match prev.take() {
-                                        Some(r) => {
-                                            let mut new = r.rect;
-                                            *new.top_mut() = 20.0 + new.top();
-                                            let item_id = Id::new(id_source).with(col_idx).with(i);
-                                            // only draggable if no cards are being dragged
-                                            let delta = if !dragged {
-                                                drag_source(ui, item_id, |ui| {
-                                                    prev = image_button!(
-                                                        ui,
-                                                        new,
-                                                        // add face_down_len to index starting from face up cards
-                                                        card_to_image(
-                                                            pile.0[i + face_down_len].unwrap()
-                                                        )
-                                                    )
-                                                    .into()
-                                                })
-                                            } else {
-                                                let item_id =
-                                                    Id::new(id_source).with(col_idx).with(i);
-                                                let layer_id =
-                                                    LayerId::new(Order::Foreground, item_id);
-                                                ui.with_layer_id(layer_id, |ui| {
-                                                    prev = image_button!(
-                                                        ui,
-                                                        new,
-                                                        // add face_down_len to index starting from face up cards
-                                                        card_to_image(
-                                                            pile.0[i + face_down_len].unwrap()
-                                                        )
-                                                    )
-                                                    .into()
-                                                });
-                                                Vec2::ZERO
-                                            };
-                                            // make sure our last Rect we use to translate the cards underneath, is
-                                            // the properly translated hovered card.
-                                            if delta != Vec2::ZERO {
-                                                dragged = true;
-                                                let prev_rect =
-                                                    prev.as_ref().unwrap().rect.translate(delta);
-                                                prev.as_mut().unwrap().rect = prev_rect;
-                                            }
-                                            if ui.memory(|mem| mem.is_being_dragged(item_id)) {
-                                                source = Some(Coord::new(
-                                                    Location::Tableau(col_idx as _),
-                                                    i as u8 + face_down_len as u8,
-                                                ));
-                                            }
-                                        }
-                                        None => {
-                                            let item_id = Id::new(id_source).with(col_idx).with(0);
-                                            let delta = drag_source(ui, item_id, |ui| {
-                                                prev = image_button!(
-                                                    ui,
-                                                    // add face_down_len to index starting from face up cards
-                                                    card_to_image(
-                                                        pile.0[i + face_down_len].unwrap()
-                                                    )
-                                                )
-                                                .into();
-                                            });
-                                            if delta != Vec2::ZERO {
-                                                dragged = true;
-                                                let prev_rect =
-                                                    prev.as_ref().unwrap().rect.translate(delta);
-                                                prev.as_mut().unwrap().rect = prev_rect;
-                                            }
-                                            if ui.memory(|mem| mem.is_being_dragged(item_id)) {
-                                                source = Some(Coord::new(
-                                                    Location::Tableau(col_idx as _),
-                                                    i as u8 + face_down_len as u8,
-                                                ));
-                                            }
-                                        }
+                                    let mut new = prev;
+                                    *new.top_mut() = 20.0 + new.top();
+                                    let item_id = Id::new(id_source).with(col_idx).with(i);
+                                    // only draggable if no cards are being dragged
+                                    let delta = if !dragged {
+                                        drag_source(ui, item_id, |ui| {
+                                            prev = image_button!(
+                                                ui,
+                                                new,
+                                                // add face_down_len to index starting from face up cards
+                                                card_to_image(pile.0[i + face_down_len].unwrap())
+                                            )
+                                            .rect
+                                        })
+                                    } else {
+                                        let item_id = Id::new(id_source).with(col_idx).with(i);
+                                        let layer_id = LayerId::new(Order::Foreground, item_id);
+                                        ui.with_layer_id(layer_id, |ui| {
+                                            prev = image_button!(
+                                                ui,
+                                                new,
+                                                // add face_down_len to index starting from face up cards
+                                                card_to_image(pile.0[i + face_down_len].unwrap())
+                                            )
+                                            .rect
+                                        });
+                                        Vec2::ZERO
+                                    };
+                                    // make sure our last Rect we use to translate the cards underneath, is
+                                    // the properly translated hovered card.
+                                    if delta != Vec2::ZERO {
+                                        dragged = true;
+                                        prev = prev.translate(delta);
+                                    }
+                                    if ui.memory(|mem| mem.is_being_dragged(item_id)) {
+                                        source = Some(Coord::new(
+                                            Location::Tableau(col_idx as _),
+                                            i as u8 + face_down_len as u8,
+                                        ));
                                     }
                                 }
                             }
@@ -184,7 +144,7 @@ pub fn drag_source(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui)) -> Vec2 {
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
 
         // Paint the body to a new layer:
-        let layer_id = LayerId::new(Order::Foreground, id);
+        let layer_id = LayerId::new(Order::Background, id);
         let response = ui.with_layer_id(layer_id, body).response;
 
         // Now we move the visuals of the body to where the mouse is.
