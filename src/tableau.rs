@@ -1,4 +1,4 @@
-use egui::{CursorIcon, Id, InnerResponse, LayerId, Order, Rect, Response, Sense, Shape, Ui, Vec2};
+use egui::{CursorIcon, Id, InnerResponse, LayerId, Order, Rect, Response, Sense, Ui, Vec2};
 use solitaire_game::{
     action::{Action, Coord, Location},
     state::find_last_idx,
@@ -50,6 +50,7 @@ impl App {
                                     }
                                 }
                                 // draw the up cards
+                                let mut dragged = false;
                                 for (i, _) in
                                     pile.0[pile.1 as usize..=last].iter().flatten().enumerate()
                                 {
@@ -58,22 +59,45 @@ impl App {
                                             let mut new = r.rect;
                                             *new.top_mut() = 20.0 + new.top();
                                             let item_id = Id::new(id_source).with(col_idx).with(i);
-                                            let delta = drag_source(ui, item_id, |ui| {
-                                                prev = image_button!(
-                                                    ui,
-                                                    new,
-                                                    // add face_down_len to index starting from face up cards
-                                                    card_to_image(
-                                                        pile.0[i + face_down_len].unwrap()
+                                            // only draggable if no cards are being dragged
+                                            let delta = if !dragged {
+                                                drag_source(ui, item_id, |ui| {
+                                                    prev = image_button!(
+                                                        ui,
+                                                        new,
+                                                        // add face_down_len to index starting from face up cards
+                                                        card_to_image(
+                                                            pile.0[i + face_down_len].unwrap()
+                                                        )
                                                     )
-                                                )
-                                                .into()
-                                            });
+                                                    .into()
+                                                })
+                                            } else {
+                                                let item_id =
+                                                    Id::new(id_source).with(col_idx).with(i);
+                                                let layer_id =
+                                                    LayerId::new(Order::Foreground, item_id);
+                                                ui.with_layer_id(layer_id, |ui| {
+                                                    prev = image_button!(
+                                                        ui,
+                                                        new,
+                                                        // add face_down_len to index starting from face up cards
+                                                        card_to_image(
+                                                            pile.0[i + face_down_len].unwrap()
+                                                        )
+                                                    )
+                                                    .into()
+                                                });
+                                                Vec2::ZERO
+                                            };
                                             // make sure our last Rect we use to translate the cards underneath, is
                                             // the properly translated hovered card.
-                                            let prev_rect =
-                                                prev.as_ref().unwrap().rect.translate(delta);
-                                            prev.as_mut().unwrap().rect = prev_rect;
+                                            if delta != Vec2::ZERO {
+                                                dragged = true;
+                                                let prev_rect =
+                                                    prev.as_ref().unwrap().rect.translate(delta);
+                                                prev.as_mut().unwrap().rect = prev_rect;
+                                            }
                                             if ui.memory(|mem| mem.is_being_dragged(item_id)) {
                                                 source = Some(Coord::new(
                                                     Location::Tableau(col_idx as _),
@@ -93,9 +117,12 @@ impl App {
                                                 )
                                                 .into();
                                             });
-                                            let prev_rect =
-                                                prev.as_ref().unwrap().rect.translate(delta);
-                                            prev.as_mut().unwrap().rect = prev_rect;
+                                            if delta != Vec2::ZERO {
+                                                dragged = true;
+                                                let prev_rect =
+                                                    prev.as_ref().unwrap().rect.translate(delta);
+                                                prev.as_mut().unwrap().rect = prev_rect;
+                                            }
                                             if ui.memory(|mem| mem.is_being_dragged(item_id)) {
                                                 source = Some(Coord::new(
                                                     Location::Tableau(col_idx as _),
@@ -180,38 +207,39 @@ pub fn drag_source(ui: &mut Ui, id: Id, body: impl FnOnce(&mut Ui)) -> Vec2 {
 
 pub fn drop_target<R>(
     ui: &mut Ui,
-    can_accept_what_is_being_dragged: bool,
+    _can_accept_what_is_being_dragged: bool,
     body: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<R> {
-    let is_being_dragged = ui.memory(|mem| mem.is_anything_being_dragged());
+    // use egui::Shape;
+    let _is_being_dragged = ui.memory(|mem| mem.is_anything_being_dragged());
 
     let margin = Vec2::splat(4.0);
 
     let outer_rect_bounds = ui.available_rect_before_wrap();
     let inner_rect = outer_rect_bounds.shrink2(margin);
-    let where_to_put_background = ui.painter().add(Shape::Noop);
+    // let where_to_put_background = ui.painter().add(Shape::Noop);
     let mut content_ui = ui.child_ui(inner_rect, *ui.layout());
     let ret = body(&mut content_ui);
     let outer_rect = Rect::from_min_max(outer_rect_bounds.min, content_ui.min_rect().max + margin);
-    let (rect, response) = ui.allocate_at_least(outer_rect.size(), Sense::hover());
+    let (_rect, response) = ui.allocate_at_least(outer_rect.size(), Sense::hover());
 
-    let style = if is_being_dragged && can_accept_what_is_being_dragged && response.hovered() {
-        ui.visuals().widgets.active
-    } else {
-        ui.visuals().widgets.inactive
-    };
+    // let style = if is_being_dragged && can_accept_what_is_being_dragged && response.hovered() {
+    //     ui.visuals().widgets.active
+    // } else {
+    //     ui.visuals().widgets.inactive
+    // };
 
-    let mut fill = style.bg_fill;
-    let mut stroke = style.bg_stroke;
-    if is_being_dragged && !can_accept_what_is_being_dragged {
-        fill = ui.visuals().gray_out(fill);
-        stroke.color = ui.visuals().gray_out(stroke.color);
-    }
+    // let mut fill = style.bg_fill;
+    // let mut stroke = style.bg_stroke;
+    // if is_being_dragged && !can_accept_what_is_being_dragged {
+    //     fill = ui.visuals().gray_out(fill);
+    //     stroke.color = ui.visuals().gray_out(stroke.color);
+    // }
 
-    ui.painter().set(
-        where_to_put_background,
-        epaint::RectShape::new(rect, style.rounding, fill, stroke),
-    );
+    // ui.painter().set(
+    //     where_to_put_background,
+    //     epaint::RectShape::new(rect, style.rounding, fill, stroke),
+    // );
 
     InnerResponse::new(ret, response)
 }
