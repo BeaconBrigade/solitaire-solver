@@ -70,8 +70,8 @@ macro_rules! image_button {
     ($ui:expr, $pos:expr, $path:expr) => {
         $ui.put(
             $pos,
-            egui::ImageButton::new(egui::Image::new($path).fit_to_exact_size($crate::IMAGE_SIZE))
-                .frame(false)
+            egui::Image::new($path)
+                .fit_to_exact_size($crate::IMAGE_SIZE)
                 .sense(egui::Sense::drag()),
         )
     };

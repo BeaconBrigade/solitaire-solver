@@ -18,6 +18,7 @@ impl App {
         ui.horizontal(|ui| {
             for (col_idx, pile) in self.game.state.tableau.into_iter().enumerate() {
                 ui.vertical(|ui| {
+                    ui.ctx().set_debug_on_hover(true);
                     let can_accept_what_is_being_dragged = true;
                     let max_idx = find_last_idx(pile.0.into_iter(), |c| c.is_some());
                     // make sure rect is initialized as nothing
@@ -48,6 +49,7 @@ impl App {
                                 }
                                 // draw the up cards
                                 let mut dragged = false;
+                                let mut dragged_idx = 0;
                                 for (i, _) in
                                     pile.0[pile.1 as usize..=last].iter().flatten().enumerate()
                                 {
@@ -66,23 +68,33 @@ impl App {
                                             .rect
                                         })
                                     } else {
-                                        let item_id = Id::new(id_source).with(col_idx).with(i);
-                                        let layer_id = LayerId::new(Order::Foreground, item_id);
-                                        ui.with_layer_id(layer_id, |ui| {
-                                            prev = image_button!(
-                                                ui,
-                                                new,
-                                                // add face_down_len to index starting from face up cards
-                                                card_to_image(pile.0[i + face_down_len].unwrap())
-                                            )
-                                            .rect
-                                        });
+                                        let layer_id = LayerId::new(Order::Middle, item_id);
+                                        let response = ui
+                                            .with_layer_id(layer_id, |ui| {
+                                                prev = image_button!(
+                                                    ui,
+                                                    // add face_down_len to index starting from face up cards
+                                                    card_to_image(
+                                                        pile.0[i + face_down_len].unwrap()
+                                                    )
+                                                )
+                                                .rect
+                                            })
+                                            .response;
+                                        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+                                            let delta = pointer_pos - response.rect.center();
+                                            let delta =
+                                                Vec2::new(0.0, 20.0 * dragged_idx as f32) + delta;
+                                            ui.ctx().translate_layer(layer_id, delta);
+                                        }
+                                        dragged_idx += 1;
                                         Vec2::ZERO
                                     };
                                     // make sure our last Rect we use to translate the cards underneath, is
                                     // the properly translated hovered card.
                                     if delta != Vec2::ZERO {
                                         dragged = true;
+                                        dragged_idx = 1;
                                         prev = prev.translate(delta);
                                     }
                                     if ui.memory(|mem| mem.is_being_dragged(item_id)) {
