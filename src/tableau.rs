@@ -18,7 +18,6 @@ impl App {
         ui.horizontal(|ui| {
             for (col_idx, pile) in self.game.state.tableau.into_iter().enumerate() {
                 ui.vertical(|ui| {
-                    ui.ctx().set_debug_on_hover(true);
                     let can_accept_what_is_being_dragged = true;
                     let max_idx = find_last_idx(pile.0.into_iter(), |c| c.is_some());
                     // make sure rect is initialized as nothing

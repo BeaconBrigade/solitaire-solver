@@ -1,5 +1,6 @@
 mod image;
 mod tableau;
+mod top_ui;
 
 use std::env;
 use std::fs::File;
@@ -7,11 +8,9 @@ use std::io::Read;
 use std::str::FromStr;
 
 use eframe::{egui, CreationContext, NativeOptions};
-use egui::{Color32, Frame, Margin, RichText, Vec2, ViewportBuilder};
-use image::{card_to_image, BACK, BLANK};
-use solitaire_game::action::Action;
+use egui::{Color32, Frame, Margin, ViewportBuilder};
+use epaint::Vec2;
 use solitaire_game::deck::Deck;
-use solitaire_game::state::find_last;
 use solitaire_game::Solitaire;
 
 pub const IMAGE_SIZE: Vec2 = Vec2::new(75.0, 108.9);
@@ -91,53 +90,12 @@ impl eframe::App for App {
             ..Default::default()
         };
         egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.heading(
-                    RichText::new("Cool Solitaire Game")
-                        .strong()
-                        .color(Color32::LIGHT_GRAY),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                    if ui
-                        .button(RichText::new("Restart").color(Color32::BLACK))
-                        .clicked()
-                    {
-                        self.game = self.original;
-                    }
-                });
-            });
+            self.draw_heading(ui);
             ui.add_space(10.0);
 
             ui.horizontal(|ui| {
-                // draw foundation
-                for pile in self.game.state.foundation {
-                    let card = find_last(pile.into_iter(), |c| c.is_some()).flatten();
-                    image_button!(
-                        ui,
-                        card.map(card_to_image).unwrap_or_else(|| BLANK.to_string())
-                    );
-                }
-
-                // draw talon and deck
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                    let top_of_deck =
-                        if self.game.state.talon.1 as usize == self.game.state.talon.0.len() {
-                            BLANK
-                        } else {
-                            BACK
-                        };
-                    if image_button!(ui, top_of_deck).clicked() {
-                        self.game.do_move(Action::TurnStock);
-                    }
-                    let top_of_talon = if self.game.state.talon.1 < 0 {
-                        BLANK.to_string()
-                    } else {
-                        self.game.state.talon.0[self.game.state.talon.1 as usize]
-                            .map(card_to_image)
-                            .unwrap_or_else(|| BLANK.to_string())
-                    };
-                    image_button!(ui, top_of_talon);
-                });
+                self.draw_foundation(ui);
+                self.draw_talon(ui);
             });
 
             // draw the tableau
