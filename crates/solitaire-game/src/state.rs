@@ -158,7 +158,7 @@ impl State {
                     }
                     Location::Tableau(i) => {
                         // ensure from card is face up
-                        if self.tableau[i as usize].1 < from.idx {
+                        if self.tableau[i as usize].1 > from.idx {
                             println!("trying to move card that's face down");
                             return new;
                         }
@@ -169,9 +169,12 @@ impl State {
                         // there are multiple cards to move, this will copy None to the correct places
                         new.tableau[i as usize].0[from.idx as usize..=last_idx].fill(None);
 
-                        // convert to i8 to make sure no overflow errors occur
-                        new.tableau[i as usize].1 =
-                            cmp::max(0, new.tableau[i as usize].1 as i8 - 1) as u8;
+                        // only reveal face down cards when we're moving the card on top of the foundation stack
+                        if from.idx == self.tableau[i as usize].1 {
+                            // convert to i8 to make sure no overflow errors occur
+                            new.tableau[i as usize].1 =
+                                cmp::max(0, new.tableau[i as usize].1 as i8 - 1) as u8;
+                        }
                     }
                     Location::Talon => {
                         println!("taking from talon");
