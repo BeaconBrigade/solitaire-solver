@@ -18,8 +18,10 @@ pub struct State {
     /// There are four foundation slots each with up to 13 cards
     pub foundation: [[Option<Card>; 13]; 4],
     /// The deck and talon have at most 24 cards. The second
-    /// integer represents where face up cards start.
-    pub talon: ([Option<Card>; 24], i8),
+    /// first integer represents where face up cards start.
+    /// The second one represents how many cards are in the
+    /// talon.
+    pub talon: ([Option<Card>; 24], i8, u8),
 }
 
 impl Default for State {
@@ -49,7 +51,7 @@ impl State {
             talon[i] = Some(c);
         }
         // start at -1 since no cards start available
-        let talon = (talon, -1);
+        let talon = (talon, -1, 24);
 
         Self {
             tableau,
@@ -65,7 +67,11 @@ impl State {
                 println!("turning stock");
                 // make sure the addition doesn't go past 23
                 let next = self.talon.1 + 1;
-                new.talon.1 = if next > 23 { -1 } else { next }
+                new.talon.1 = if next > self.talon.2 as i8 - 1 {
+                    -1
+                } else {
+                    next
+                };
             }
             Action::Move(from, to) => {
                 println!("making a move");
@@ -126,12 +132,10 @@ impl State {
                         match placement_item {
                             Some(up) => {
                                 if up.has_same_colour(&from_item) {
-                                    println!("wtf: {up:?} - {from_item:?}");
                                     println!("tried to move card in tableau to same colour");
                                     return new;
                                 }
                                 if up.value as u8 != from_item.value as u8 + 1 {
-                                    println!("wth: up({up:?}) from({from_item:?})",);
                                     println!("tried to move card in tableau to card not one level higher");
                                     return new;
                                 }
@@ -183,6 +187,8 @@ impl State {
                         // rotate to move the None value to the right end of the array
                         new.talon.0[from.idx as usize..].rotate_left(1);
                         new.talon.1 -= 1;
+                        // remove one card from the talon
+                        new.talon.2 -= 1;
                     }
                 }
 
@@ -191,6 +197,18 @@ impl State {
                     Location::Foundation(i) => {
                         println!("moving source to foundation");
                         new.foundation[i as usize][to.idx as usize] = Some(from_item);
+                        // ensure we aren't moving multiple cards to the foundation
+                        if let Location::Tableau(from_col) = from.location {
+                            let last_idx =
+                                find_last_idx(self.tableau[from_col as usize].0.into_iter(), |c| {
+                                    c.is_some()
+                                })
+                                .unwrap();
+                            if from.idx < last_idx as u8 {
+                                println!("trying to move multiple cards to the foundation");
+                                return new;
+                            }
+                        }
                     }
                     Location::Tableau(i) => {
                         println!("moving source to tableau ({i})");

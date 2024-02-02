@@ -1,6 +1,6 @@
 use egui::{CursorIcon, Id, InnerResponse, LayerId, Order, Rect, Sense, Ui, Vec2};
 use solitaire_game::{
-    action::{Action, Coord, Location},
+    action::{Coord, Location},
     state::find_last_idx,
 };
 
@@ -11,7 +11,7 @@ use crate::{
 
 /// Functions for drawing the tableau
 impl App {
-    pub fn draw_tableau(&mut self, ui: &mut Ui) {
+    pub fn draw_tableau(&mut self, ui: &mut Ui) -> (Option<Coord>, Option<Coord>) {
         let id_source = "tableau_source";
         let mut source: Option<Coord> = None;
         let mut dest: Option<usize> = None;
@@ -118,21 +118,15 @@ impl App {
                 });
             }
         });
-
-        if let (Some(coord), Some(dest)) = (source, dest) {
-            if ui.input(|i| i.pointer.any_released()) {
-                // do the drop:
-                let from = coord;
-                let to = Coord::new(
-                    Location::Tableau(dest as _),
-                    find_last_idx(self.game.state.tableau[dest].0.into_iter(), |c| c.is_some())
-                        .map(|i| (i + 1) as u8)
-                        .unwrap_or(0),
-                );
-                println!("doing move: f({from:?}) - t({to:?})");
-                self.game.do_move(Action::Move(from, to));
-            }
-        }
+        let dest = dest.map(|d| {
+            Coord::new(
+                Location::Tableau(d as _),
+                find_last_idx(self.game.state.tableau[d].0.into_iter(), |c| c.is_some())
+                    .map(|i| (i + 1) as u8)
+                    .unwrap_or(0),
+            )
+        });
+        (source, dest)
     }
 }
 
@@ -181,9 +175,7 @@ pub fn drop_target<R>(
     _can_accept_what_is_being_dragged: bool,
     body: impl FnOnce(&mut Ui) -> R,
 ) -> InnerResponse<R> {
-    // use egui::Shape;
     let _is_being_dragged = ui.memory(|mem| mem.is_anything_being_dragged());
-
     let margin = Vec2::splat(4.0);
 
     let outer_rect_bounds = ui.available_rect_before_wrap();
@@ -193,24 +185,6 @@ pub fn drop_target<R>(
     let ret = body(&mut content_ui);
     let outer_rect = Rect::from_min_max(outer_rect_bounds.min, content_ui.min_rect().max + margin);
     let (_rect, response) = ui.allocate_at_least(outer_rect.size(), Sense::hover());
-
-    // let style = if is_being_dragged && can_accept_what_is_being_dragged && response.hovered() {
-    //     ui.visuals().widgets.active
-    // } else {
-    //     ui.visuals().widgets.inactive
-    // };
-
-    // let mut fill = style.bg_fill;
-    // let mut stroke = style.bg_stroke;
-    // if is_being_dragged && !can_accept_what_is_being_dragged {
-    //     fill = ui.visuals().gray_out(fill);
-    //     stroke.color = ui.visuals().gray_out(stroke.color);
-    // }
-
-    // ui.painter().set(
-    //     where_to_put_background,
-    //     epaint::RectShape::new(rect, style.rounding, fill, stroke),
-    // );
 
     InnerResponse::new(ret, response)
 }
