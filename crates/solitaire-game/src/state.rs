@@ -64,10 +64,10 @@ impl State {
         let mut new = *self;
         match action {
             Action::TurnStock => {
-                println!("turning stock");
+                // println!("turning stock");
                 // make sure the addition doesn't go past 23
                 // convert between float to turn the number to zero if it's negative
-                let remaining = self.talon.2 - 1 - self.talon.1 as f32 as u8;
+                let remaining = self.talon.2 - 1 - (self.talon.1 as f32 as u8);
                 if remaining == 0 {
                     new.talon.1 = -1;
                 } else {
@@ -75,99 +75,23 @@ impl State {
                 }
             }
             Action::Move(from, to) => {
-                println!("making a move");
-                // do nothing
-                if from == to {
-                    println!("from is to");
+                // println!("making a move");
+                if !self.is_valid_move(action) {
                     return new;
                 }
-                // card can't move to the talon
-                if to.location == Location::Talon {
-                    println!("trying to move through talon");
-                    return new;
-                }
-                // can't move within the same column in both the talon or the tableau
-                if from.location == to.location {
-                    println!("trying to move to same column");
-                    return new;
-                }
-
-                // make sure from card exists but the to location doesn't
-                let Some(from_item) = self.get(from) else {
-                    println!("no item found at location");
-                    return new;
-                };
-                let None = self.get(to) else {
-                    println!("card already at new");
-                    return new;
-                };
-                // get the card from will have to move to
-                let placement_item = if to.idx > 0 {
-                    let above = Coord::new(to.location, to.idx - 1);
-                    self.get(above)
-                } else {
-                    None
-                };
-
-                // ensure move is valid
-                match to.location {
-                    Location::Foundation(_) => match placement_item {
-                        Some(up) => {
-                            if up.suit != from_item.suit {
-                                println!("tried to move to the foundation with unmatched suits");
-                                return new;
-                            }
-                            if up.value as u8 != from_item.value as u8 - 1 {
-                                println!("tried to move to foundation with unordered numbers");
-                                return new;
-                            }
-                        }
-                        None => {
-                            if from_item.value != Value::Ace {
-                                println!("tried to move non-ace to base of foundation");
-                                return new;
-                            }
-                        }
-                    },
-                    Location::Tableau(_) => {
-                        match placement_item {
-                            Some(up) => {
-                                if up.has_same_colour(&from_item) {
-                                    println!("tried to move card in tableau to same colour");
-                                    return new;
-                                }
-                                if up.value as u8 != from_item.value as u8 + 1 {
-                                    println!("tried to move card in tableau to card not one level higher");
-                                    return new;
-                                }
-                            }
-                            None => {
-                                if from_item.value != Value::King {
-                                    println!("tried to move non-king to empty tableau stack");
-                                    return new;
-                                }
-                            }
-                        }
-                    }
-                    Location::Talon => unreachable!(),
-                }
+                let from_item = self.get(from).unwrap();
 
                 // remove item from source
                 match from.location {
                     Location::Foundation(i) => {
-                        println!("removing source from foundation");
+                        // println!("removing source from foundation");
                         let idx =
                             find_last_idx(new.foundation[i as usize].into_iter(), |c| c.is_some())
                                 .unwrap();
                         new.foundation[i as usize][idx] = None;
                     }
                     Location::Tableau(i) => {
-                        // ensure from card is face up
-                        if self.tableau[i as usize].1 > from.idx {
-                            println!("trying to move card that's face down");
-                            return new;
-                        }
-                        println!("removing source from tableau");
+                        // println!("removing source from tableau");
                         let last_idx =
                             find_last_idx(new.tableau[i as usize].0.into_iter(), |c| c.is_some())
                                 .unwrap();
@@ -182,7 +106,7 @@ impl State {
                         }
                     }
                     Location::Talon => {
-                        println!("taking from talon");
+                        // println!("taking from talon");
                         // clear the slot
                         new.talon.0[from.idx as usize] = None;
                         // rotate to move the None value to the right end of the array
@@ -196,23 +120,11 @@ impl State {
                 // add item to dest
                 match to.location {
                     Location::Foundation(i) => {
-                        println!("moving source to foundation");
+                        // println!("moving source to foundation");
                         new.foundation[i as usize][to.idx as usize] = Some(from_item);
-                        // ensure we aren't moving multiple cards to the foundation
-                        if let Location::Tableau(from_col) = from.location {
-                            let last_idx =
-                                find_last_idx(self.tableau[from_col as usize].0.into_iter(), |c| {
-                                    c.is_some()
-                                })
-                                .unwrap();
-                            if from.idx < last_idx as u8 {
-                                println!("trying to move multiple cards to the foundation");
-                                return new;
-                            }
-                        }
                     }
                     Location::Tableau(i) => {
-                        println!("moving source to tableau ({i})");
+                        // println!("moving source to tableau ({i})");
                         // moving from tableau to tableau, we might have to move multiple cards
                         if let Location::Tableau(from_col) = from.location {
                             let last_idx =
@@ -235,6 +147,118 @@ impl State {
             }
         }
         new
+    }
+
+    pub fn is_valid_move(&self, action: Action) -> bool {
+        match action {
+            // all turn stocks can be valid.
+            // we could check whether there's any cards left
+            // in the talon or deck but this action doesn't
+            // cause any issues if there's no cards left so
+            // may as well just let it slide.
+            Action::TurnStock => {}
+            Action::Move(from, to) => {
+                // do nothing
+                if from == to {
+                    // println!("from is to");
+                    return false;
+                }
+                // card can't move to the talon
+                if to.location == Location::Talon {
+                    // println!("trying to move through talon");
+                    return false;
+                }
+                // can't move within the same column in both the talon or the tableau
+                if from.location == to.location {
+                    // println!("trying to move to same column");
+                    return false;
+                }
+
+                // make sure from card exists but the to location doesn't
+                let Some(from_item) = self.get(from) else {
+                    // println!("no item found at location");
+                    return false;
+                };
+                let None = self.get(to) else {
+                    // println!("card already at new");
+                    return false;
+                };
+                // get the card from will have to move to
+                let placement_item = if to.idx > 0 {
+                    let above = Coord::new(to.location, to.idx - 1);
+                    self.get(above)
+                } else {
+                    None
+                };
+
+                // ensure move is valid
+                match to.location {
+                    Location::Foundation(_) => {
+                        // ensure we aren't moving multiple cards to the foundation
+                        if let Location::Tableau(from_col) = from.location {
+                            let last_idx =
+                                find_last_idx(self.tableau[from_col as usize].0.into_iter(), |c| {
+                                    c.is_some()
+                                })
+                                .unwrap();
+                            if from.idx < last_idx as u8 {
+                                // println!("trying to move multiple cards to the foundation");
+                                return false;
+                            }
+                        }
+                        match placement_item {
+                            Some(up) => {
+                                if up.suit != from_item.suit {
+                                    // println!(
+                                    //     "tried to move to the foundation with unmatched suits"
+                                    // );
+                                    return false;
+                                }
+                                if up.value as u8 != from_item.value as u8 - 1 {
+                                    // println!("tried to move to foundation with unordered numbers");
+                                    return false;
+                                }
+                            }
+                            None => {
+                                if from_item.value != Value::Ace {
+                                    // println!("tried to move non-ace to base of foundation");
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    Location::Tableau(_) => {
+                        match placement_item {
+                            Some(up) => {
+                                if up.has_same_colour(&from_item) {
+                                    // println!("tried to move card in tableau to same colour");
+                                    return false;
+                                }
+                                if up.value as u8 != from_item.value as u8 + 1 {
+                                    // println!("tried to move card in tableau to card not one level higher");
+                                    return false;
+                                }
+                            }
+                            None => {
+                                if from_item.value != Value::King {
+                                    // println!("tried to move non-king to empty tableau stack");
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    Location::Talon => unreachable!(),
+                }
+                if let Location::Tableau(i) = from.location {
+                    if self.tableau[i as usize].1 > from.idx {
+                        // println!("trying to move card that's face down");
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
     }
 
     pub fn get(&self, pos: Coord) -> Option<Card> {
