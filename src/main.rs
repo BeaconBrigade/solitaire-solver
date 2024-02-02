@@ -19,7 +19,7 @@ pub const IMAGE_SIZE: Vec2 = Vec2::new(75.0, 108.9);
 fn main() -> eframe::Result<()> {
     let opts = NativeOptions {
         window_builder: Some(Box::new(|mut v: ViewportBuilder| {
-            v.min_inner_size = Some(Vec2::new(800.0, 600.0));
+            v.min_inner_size = Some(Vec2::new(1000.0, 750.0));
             v
         })),
         default_theme: eframe::Theme::Light,

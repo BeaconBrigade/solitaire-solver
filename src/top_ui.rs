@@ -1,4 +1,4 @@
-use egui::{Id, RichText, Ui};
+use egui::{CursorIcon, Id, RichText, Ui};
 use epaint::Color32;
 use solitaire_game::{
     action::{Action, Coord, Location},
@@ -82,15 +82,22 @@ impl App {
     pub fn draw_talon(&mut self, ui: &mut Ui) -> (Option<Coord>, Option<Coord>) {
         let mut source: Option<Coord> = None;
         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-            let top_of_deck =
-                if self.game.state.talon.1 as usize == self.game.state.talon.2 as usize - 1 {
-                    BLANK
-                } else {
-                    BACK
-                };
-            if image_button!(ui, top_of_deck).clicked() {
+            let top_of_deck = if self.game.state.talon.1 as usize
+                == (self.game.state.talon.2 as usize).wrapping_sub(1)
+            {
+                BLANK
+            } else {
+                BACK
+            };
+            let top_res = image_button!(ui, top_of_deck);
+            if top_res.clicked() {
                 self.game.do_move(Action::TurnStock);
             }
+            if top_res.hovered() {
+                ui.ctx().set_cursor_icon(CursorIcon::Grab);
+            }
+
+            ui.add_space(50.0);
 
             let item_id = Id::new("talon");
             if self.game.state.talon.1 < 0 {
@@ -99,18 +106,55 @@ impl App {
                 let top = self.game.state.talon.0[self.game.state.talon.1 as usize]
                     .map(card_to_image)
                     .unwrap_or_else(|| BLANK.to_string());
-                let under = match self.game.state.talon.1 {
-                    -1 | 0 => BLANK.to_string(),
-                    _ => self.game.state.talon.0[self.game.state.talon.1 as usize - 1]
-                        .map(card_to_image)
-                        .unwrap(),
-                };
-                let res = image_button!(ui, under);
-                if top != BLANK {
-                    drag_source(ui, item_id, |ui| {
-                        image_button!(ui, res.rect, top);
-                    });
-                }
+
+                ui.horizontal(|ui| {
+                    let res = match self.game.state.talon.1 {
+                        // no cards underneath
+                        -1 | 0 => image_button!(ui, BLANK),
+                        // one card underneath
+                        1 => {
+                            let mut res = image_button!(
+                                ui,
+                                self.game.state.talon.0[self.game.state.talon.1 as usize - 1]
+                                    .map(card_to_image)
+                                    .unwrap()
+                            );
+                            let mut new = res.rect;
+                            *new.right_mut() += 30.0;
+                            res.rect = new;
+                            res
+                        }
+                        // two cards underneath
+                        _ => {
+                            let res = image_button!(
+                                ui,
+                                self.game.state.talon.0[self.game.state.talon.1 as usize - 2]
+                                    .map(card_to_image)
+                                    .unwrap()
+                            );
+                            let mut new = res.rect;
+                            *new.right_mut() += 30.0;
+                            let mut res = image_button!(
+                                ui,
+                                new,
+                                self.game.state.talon.0[self.game.state.talon.1 as usize - 1]
+                                    .map(card_to_image)
+                                    .unwrap()
+                            );
+
+                            new = res.rect;
+                            *new.right_mut() += 30.0;
+                            res.rect = new;
+                            res
+                        }
+                    };
+
+                    if top != BLANK {
+                        drag_source(ui, item_id, |ui| {
+                            image_button!(ui, res.rect, top);
+                        });
+                    }
+                });
             };
 
             if ui.memory(|mem| mem.is_being_dragged(item_id)) {
