@@ -2377,6 +2377,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "solitaire-solver"
+version = "0.1.0"
+dependencies = [
+ "solitaire-game",
+]
+
+[[package]]
 name = "solitaire-user"
 version = "0.1.0"
 dependencies = [
