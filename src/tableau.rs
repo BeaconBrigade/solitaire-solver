@@ -1,4 +1,4 @@
-use egui::{emath::TSTransform, DragAndDrop, Frame, Id, LayerId, Order, Rect, Ui, UiBuilder, Vec2};
+use egui::{DragAndDrop, Frame, Id, LayerId, Order, Rect, Ui, UiBuilder};
 use solitaire_game::{
     action::{Coord, Location},
     state::find_last_idx,
@@ -47,81 +47,90 @@ impl App {
                                     prev = image_button!(ui, new, BACK).rect;
                                 }
                                 // draw the up cards
-                                let mut dragged = false;
-                                let mut dragged_idx = 0;
-                                for (i, cur_card) in
-                                    pile.0[pile.1 as usize..=last].iter().flatten().enumerate()
+
+                                // find card which is being dragged
+                                let dragged_idx: usize = DragAndDrop::payload::<Coord>(ui.ctx())
+                                    .filter(|c| c.location == Location::Tableau(col_idx as _))
+                                    .map(|c| c.idx as usize)
+                                    .unwrap_or(100);
+
+                                // draw cards normally until dragged card
+                                for (i, cur_card) in pile.0
+                                    [pile.1 as usize..dragged_idx.min(last + 1)]
+                                    .iter()
+                                    .flatten()
+                                    .enumerate()
                                 {
+                                    let idx = (i + face_down_len) as u8;
+                                    let item_id = Id::new(id_source).with(col_idx).with(idx);
+                                    let coord = Coord::new(Location::Tableau(col_idx as _), idx);
                                     let mut new = prev;
                                     *new.top_mut() = 20.0 + new.top();
-                                    let item_id = Id::new(id_source).with(col_idx).with(i);
-                                    if DragAndDrop::payload::<Coord>(ui.ctx()).is_some() {
-                                        dragged = true;
-                                    }
-                                    // only draggable if no cards are being dragged
-                                    let delta = if !dragged {
-                                        let coord = Coord::new(
-                                            Location::Tableau(col_idx as _),
-                                            i as u8 + face_down_len as u8,
-                                        );
-                                        let response = ui
-                                            .dnd_drag_source(item_id, coord, |ui| {
-                                                prev = image_button!(
-                                                    ui,
-                                                    new,
-                                                    // add face_down_len to index starting from face up cards
-                                                    card_to_image(*cur_card)
-                                                )
-                                                .rect
-                                            })
-                                            .response;
-                                        if DragAndDrop::payload(ui.ctx()).map(|p| *p) == Some(coord)
-                                        {
-                                            if let Some(pointer_pos) =
-                                                ui.ctx().pointer_interact_pos()
-                                            {
-                                                pointer_pos - response.rect.center()
-                                            } else {
-                                                Vec2::ZERO
-                                            }
-                                        } else {
-                                            Vec2::ZERO
-                                        }
-                                    } else {
-                                        let layer_id = LayerId::new(Order::Middle, item_id);
-                                        let response = ui
-                                            .scope_builder(
-                                                UiBuilder::new().layer_id(layer_id),
-                                                |ui| {
-                                                    prev = image_button!(
+                                    ui.dnd_drag_source(item_id, coord, |ui| {
+                                        prev =
+                                            image_button!(ui, new, card_to_image(*cur_card)).rect;
+                                    });
+                                }
+
+                                // we do have more things to draw
+                                println!("last={last}, dragged={dragged_idx}");
+                                if last >= dragged_idx {
+                                    // now draw the dragged item (let egui handle it)
+                                    let item_id =
+                                        Id::new(id_source).with(col_idx).with(dragged_idx);
+                                    let coord = Coord::new(
+                                        Location::Tableau(col_idx as _),
+                                        dragged_idx as u8,
+                                    );
+                                    println!(
+                                        "dragged is {}",
+                                        card_to_image(pile.0[dragged_idx].unwrap())
+                                    );
+                                    ui.scope_builder(
+                                        UiBuilder::new().layer_id(LayerId::new(
+                                            Order::Tooltip,
+                                            item_id.with("chicken-nugget"),
+                                        )),
+                                        |ui| {
+                                            let base_pos = ui
+                                                .dnd_drag_source(item_id, coord, |ui| {
+                                                    image_button!(
                                                         ui,
-                                                        // add face_down_len to index starting from face up cards
-                                                        card_to_image(*cur_card)
-                                                    )
-                                                    .rect
-                                                },
-                                            )
-                                            .response;
-                                        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-                                            let delta = pointer_pos - response.rect.center();
-                                            let delta =
-                                                Vec2::new(0.0, 20.0 * dragged_idx as f32) + delta;
-                                            let transform = TSTransform {
-                                                scaling: 1.0,
-                                                translation: delta,
-                                            };
-                                            ui.ctx().transform_layer_shapes(layer_id, transform);
-                                        }
-                                        dragged_idx += 1;
-                                        Vec2::ZERO
-                                    };
-                                    // make sure our last Rect we use to translate the cards underneath, is
-                                    // the properly translated hovered card.
-                                    if delta != Vec2::ZERO {
-                                        dragged = true;
-                                        dragged_idx = 1;
-                                        prev = prev.translate(delta);
-                                    }
+                                                        card_to_image(pile.0[dragged_idx].unwrap())
+                                                    );
+                                                })
+                                                .response
+                                                .rect;
+
+                                            for (i, cur_card) in pile.0[dragged_idx + 1..=last]
+                                                .iter()
+                                                .flatten()
+                                                .enumerate()
+                                            {
+                                                let idx = (i + face_down_len) as u8;
+                                                let item_id =
+                                                    Id::new(id_source).with(col_idx).with(idx);
+                                                // let coord =
+                                                //     Coord::new(Location::Tableau(col_idx as _), idx);
+                                                let mut pos = base_pos;
+                                                *pos.top_mut() = 20.0 * i as f32 + pos.top();
+                                                println!("drawing card at offset: {}", 20 * i);
+                                                ui.scope_builder(
+                                                    UiBuilder::new().layer_id(LayerId::new(
+                                                        Order::Foreground,
+                                                        item_id,
+                                                    )),
+                                                    |ui| {
+                                                        image_button!(
+                                                            ui,
+                                                            pos,
+                                                            card_to_image(*cur_card)
+                                                        );
+                                                    },
+                                                );
+                                            }
+                                        },
+                                    );
                                 }
                             }
                             None => {
