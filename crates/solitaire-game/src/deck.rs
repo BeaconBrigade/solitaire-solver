@@ -1,6 +1,6 @@
 /// Types for the deck of cards
 ///
-use std::{fmt::Write, str::FromStr};
+use std::{fmt::Display, str::FromStr};
 
 use rand::seq::SliceRandom;
 
@@ -27,13 +27,12 @@ impl Default for Deck {
     }
 }
 
-impl ToString for Deck {
-    fn to_string(&self) -> String {
-        let mut buf = String::new();
+impl Display for Deck {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for card in self.0 {
-            writeln!(&mut buf, "{}", card.to_string()).unwrap();
+            writeln!(f, "{}", card.to_string()).unwrap();
         }
-        buf
+        Ok(())
     }
 }
 
@@ -82,9 +81,9 @@ impl Card {
     }
 }
 
-impl ToString for Card {
-    fn to_string(&self) -> String {
-        format!("{} {}", self.suit.to_string(), self.value.to_string())
+impl Display for Card {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.suit.to_string(), self.value.to_string())
     }
 }
 
@@ -106,15 +105,18 @@ pub enum Suit {
     Diamonds,
 }
 
-impl ToString for Suit {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Hearts => "Hearts",
-            Self::Spades => "Spades",
-            Self::Clubs => "Clubs",
-            Self::Diamonds => "Diamonds",
-        }
-        .to_string()
+impl Display for Suit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Hearts => "Hearts",
+                Self::Spades => "Spades",
+                Self::Clubs => "Clubs",
+                Self::Diamonds => "Diamonds",
+            }
+        )
     }
 }
 
@@ -150,24 +152,27 @@ pub enum Value {
     King = 13,
 }
 
-impl ToString for Value {
-    fn to_string(&self) -> String {
-        match self {
-            Ace => "Ace",
-            Two => "Two",
-            Three => "Three",
-            Four => "Four",
-            Five => "Five",
-            Six => "Six",
-            Seven => "Seven",
-            Eight => "Eight",
-            Nine => "Nine",
-            Ten => "Ten",
-            Jack => "Jack",
-            Queen => "Queen",
-            King => "King",
-        }
-        .to_string()
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Ace => "Ace",
+                Two => "Two",
+                Three => "Three",
+                Four => "Four",
+                Five => "Five",
+                Six => "Six",
+                Seven => "Seven",
+                Eight => "Eight",
+                Nine => "Nine",
+                Ten => "Ten",
+                Jack => "Jack",
+                Queen => "Queen",
+                King => "King",
+            }
+        )
     }
 }
 

@@ -22,11 +22,9 @@ fn main() -> eframe::Result<()> {
             v.min_inner_size = Some(Vec2::new(1000.0, 750.0));
             v
         })),
-        default_theme: eframe::Theme::Light,
-        follow_system_theme: false,
         ..Default::default()
     };
-    eframe::run_native("Solitaire", opts, Box::new(|cc| Box::new(App::new(cc))))?;
+    eframe::run_native("Solitaire", opts, Box::new(|cc| Ok(Box::new(App::new(cc)))))?;
 
     Ok(())
 }
@@ -49,7 +47,7 @@ impl App {
         } else {
             Deck::new_shuffled()
         };
-        println!("{}", deck.to_string());
+        println!("{}", deck);
         let game = Solitaire::with_deck(deck);
 
         let original = game;
@@ -87,17 +85,18 @@ impl eframe::App for App {
         let frame = Frame {
             // nice green colour
             fill: Color32::from_rgb(0x01, 0x7e, 0x04),
-            inner_margin: Margin::same(20.0),
+            inner_margin: Margin::same(20),
             ..Default::default()
         };
         egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
             self.draw_heading(ui);
             ui.add_space(10.0);
 
-            let (mut f_source, mut f_dest, mut p_source, mut p_dest) = (None, None, None, None);
+            let (mut f_source, mut f_dest) = (None, None);
             ui.horizontal(|ui| {
                 (f_source, f_dest) = self.draw_foundation(ui);
-                (p_source, p_dest) = self.draw_talon(ui);
+                // this guy has no drop zone so it won't return any source/dest pairs
+                self.draw_talon(ui);
             });
 
             // draw the tableau
@@ -105,8 +104,8 @@ impl eframe::App for App {
             let (t_source, t_dest) = self.draw_tableau(ui);
 
             // combine all sources and dests; there should only be one of each
-            let source = f_source.or(t_source).or(p_source);
-            let dest = f_dest.or(t_dest).or(p_dest);
+            let source = f_source.or(t_source);
+            let dest = f_dest.or(t_dest);
 
             if let (Some(coord), Some(dest)) = (source, dest) {
                 if ui.input(|i| i.pointer.any_released()) {

@@ -1,4 +1,4 @@
-use egui::{CursorIcon, Id, RichText, Ui};
+use egui::{CursorIcon, Frame, Id, RichText, Ui};
 use epaint::Color32;
 use solitaire_game::{
     action::{Action, Coord, Location},
@@ -7,9 +7,7 @@ use solitaire_game::{
 
 use crate::{
     image::{card_to_image, BACK, BLANK},
-    image_button,
-    tableau::{drag_source, drop_target},
-    App,
+    image_button, App,
 };
 
 impl App {
@@ -36,34 +34,41 @@ impl App {
         let mut dest: Option<usize> = None;
 
         for (col_idx, pile) in self.game.state.foundation.into_iter().enumerate() {
-            let can_accept_what_is_being_dragged = true;
-            let response = drop_target(ui, can_accept_what_is_being_dragged, |ui| {
-                let idx = find_last_idx(pile.into_iter(), |c| c.is_some());
-                let item_id = Id::new("foundation").with(col_idx);
-                let (card, under_card) = match idx {
-                    Some(0) => (card_to_image(pile[0].unwrap()), BLANK.to_string()),
-                    Some(n) => (
-                        card_to_image(pile[n].unwrap()),
-                        card_to_image(pile[n - 1].unwrap()),
-                    ),
-                    None => (BLANK.to_string(), BLANK.to_string()),
-                };
-                let res = image_button!(ui, under_card);
-                drag_source(ui, item_id, |ui| {
-                    image_button!(ui, res.rect, card);
+            // TODO: tweak this
+            let frame = Frame::default().inner_margin(1.0);
+
+            let (_response, dropped) = ui
+                .dnd_drop_zone::<Coord, _>(frame, |ui| {
+                    let idx = find_last_idx(pile.into_iter(), |c| c.is_some());
+                    let item_id = Id::new("foundation").with(col_idx);
+                    let (card, under_card) = match idx {
+                        Some(0) => (card_to_image(pile[0].unwrap()), BLANK.to_string()),
+                        Some(n) => (
+                            card_to_image(pile[n].unwrap()),
+                            card_to_image(pile[n - 1].unwrap()),
+                        ),
+                        None => (BLANK.to_string(), BLANK.to_string()),
+                    };
+                    let res = image_button!(ui, under_card);
+                    // drag_source(ui, item_id, |ui| {
+                    //     image_button!(ui, res.rect, card);
+                    // });
+                    if let Some(idx) = idx {
+                        let coord =
+                            Coord::new(Location::Foundation(col_idx as _), idx as u8);
+                        ui.dnd_drag_source(item_id, coord, |ui| {
+                            image_button!(ui, res.rect, card);
+                        });
+                    } else {
+                        // non draggable
+                        image_button!(ui, res.rect, card);
+                    }
                 });
 
-                if ui.memory(|mem| mem.is_being_dragged(item_id)) {
-                    source = Some(Coord::new(
-                        Location::Foundation(col_idx as _),
-                        idx.unwrap() as u8,
-                    ));
-                }
-            })
-            .response;
-
-            let is_being_dragged = ui.memory(|mem| mem.is_anything_being_dragged());
-            if is_being_dragged && can_accept_what_is_being_dragged && response.hovered() {
+            // the dropped payload is returned if it was dropped on this drop
+            // zone, so we know dest is the current column.
+            if let Some(dropped) = dropped {
+                source = Some(*dropped);
                 dest = Some(col_idx);
             }
         }
@@ -79,8 +84,8 @@ impl App {
         (source, dest)
     }
 
-    pub fn draw_talon(&mut self, ui: &mut Ui) -> (Option<Coord>, Option<Coord>) {
-        let mut source: Option<Coord> = None;
+    // this guy has no drop zone so it won't return any source/dest pairs
+    pub fn draw_talon(&mut self, ui: &mut Ui) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
             let top_of_deck = if self.game.state.talon.1 as usize
                 == (self.game.state.talon.2 as usize).wrapping_sub(1)
@@ -150,17 +155,13 @@ impl App {
                     };
 
                     if top != BLANK {
-                        drag_source(ui, item_id, |ui| {
+                        let coord = Coord::new(Location::Talon, self.game.state.talon.1 as _);
+                        ui.dnd_drag_source(item_id, coord, |ui| {
                             image_button!(ui, res.rect, top);
                         });
                     }
                 });
             };
-
-            if ui.memory(|mem| mem.is_being_dragged(item_id)) {
-                source = Some(Coord::new(Location::Talon, self.game.state.talon.1 as _));
-            }
         });
-        (source, None)
     }
 }
