@@ -1,4 +1,4 @@
-use egui::{emath::TSTransform, Frame, Id, LayerId, Order, Rect, Ui, UiBuilder, Vec2};
+use egui::{emath::TSTransform, DragAndDrop, Frame, Id, LayerId, Order, Rect, Ui, UiBuilder, Vec2};
 use solitaire_game::{
     action::{Coord, Location},
     state::find_last_idx,
@@ -19,7 +19,7 @@ impl App {
             for (col_idx, pile) in self.game.state.tableau.into_iter().enumerate() {
                 ui.vertical(|ui| {
                     // TODO: tweak
-                    let frame = Frame::default().inner_margin(1.0);
+                    let frame = Frame::default();
                     let max_idx = find_last_idx(pile.0.into_iter(), |c| c.is_some());
                     // make sure rect is initialized as nothing
                     let mut prev: Rect = Rect::ZERO;
@@ -49,12 +49,15 @@ impl App {
                                 // draw the up cards
                                 let mut dragged = false;
                                 let mut dragged_idx = 0;
-                                for (i, _) in
+                                for (i, cur_card) in
                                     pile.0[pile.1 as usize..=last].iter().flatten().enumerate()
                                 {
                                     let mut new = prev;
                                     *new.top_mut() = 20.0 + new.top();
                                     let item_id = Id::new(id_source).with(col_idx).with(i);
+                                    if DragAndDrop::payload::<Coord>(ui.ctx()).is_some() {
+                                        dragged = true;
+                                    }
                                     // only draggable if no cards are being dragged
                                     let delta = if !dragged {
                                         let coord = Coord::new(
@@ -67,15 +70,20 @@ impl App {
                                                     ui,
                                                     new,
                                                     // add face_down_len to index starting from face up cards
-                                                    card_to_image(
-                                                        pile.0[i + face_down_len].unwrap()
-                                                    )
+                                                    card_to_image(*cur_card)
                                                 )
                                                 .rect
                                             })
                                             .response;
-                                        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-                                            pointer_pos - response.rect.center()
+                                        if DragAndDrop::payload(ui.ctx()).map(|p| *p) == Some(coord)
+                                        {
+                                            if let Some(pointer_pos) =
+                                                ui.ctx().pointer_interact_pos()
+                                            {
+                                                pointer_pos - response.rect.center()
+                                            } else {
+                                                Vec2::ZERO
+                                            }
                                         } else {
                                             Vec2::ZERO
                                         }
@@ -88,9 +96,7 @@ impl App {
                                                     prev = image_button!(
                                                         ui,
                                                         // add face_down_len to index starting from face up cards
-                                                        card_to_image(
-                                                            pile.0[i + face_down_len].unwrap()
-                                                        )
+                                                        card_to_image(*cur_card)
                                                     )
                                                     .rect
                                                 },
@@ -125,6 +131,7 @@ impl App {
                     });
 
                     if let Some(dropped) = dropped {
+                        // let _ = response.response.dnd_release_payload::<Coord>();
                         source = Some(*dropped);
                         dest = Some(col_idx);
                     }

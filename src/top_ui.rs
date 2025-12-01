@@ -35,35 +35,33 @@ impl App {
 
         for (col_idx, pile) in self.game.state.foundation.into_iter().enumerate() {
             // TODO: tweak this
-            let frame = Frame::default().inner_margin(1.0);
+            let frame = Frame::default().fill(Color32::GREEN);
 
-            let (_response, dropped) = ui
-                .dnd_drop_zone::<Coord, _>(frame, |ui| {
-                    let idx = find_last_idx(pile.into_iter(), |c| c.is_some());
-                    let item_id = Id::new("foundation").with(col_idx);
-                    let (card, under_card) = match idx {
-                        Some(0) => (card_to_image(pile[0].unwrap()), BLANK.to_string()),
-                        Some(n) => (
-                            card_to_image(pile[n].unwrap()),
-                            card_to_image(pile[n - 1].unwrap()),
-                        ),
-                        None => (BLANK.to_string(), BLANK.to_string()),
-                    };
-                    let res = image_button!(ui, under_card);
-                    // drag_source(ui, item_id, |ui| {
-                    //     image_button!(ui, res.rect, card);
-                    // });
-                    if let Some(idx) = idx {
-                        let coord =
-                            Coord::new(Location::Foundation(col_idx as _), idx as u8);
-                        ui.dnd_drag_source(item_id, coord, |ui| {
-                            image_button!(ui, res.rect, card);
-                        });
-                    } else {
-                        // non draggable
+            let (_response, dropped) = ui.dnd_drop_zone::<Coord, _>(frame, |ui| {
+                let idx = find_last_idx(pile.into_iter(), |c| c.is_some());
+                let item_id = Id::new("foundation").with(col_idx);
+                let (card, under_card) = match idx {
+                    Some(0) => (card_to_image(pile[0].unwrap()), BLANK.to_string()),
+                    Some(n) => (
+                        card_to_image(pile[n].unwrap()),
+                        card_to_image(pile[n - 1].unwrap()),
+                    ),
+                    None => (BLANK.to_string(), BLANK.to_string()),
+                };
+                let res = image_button!(ui, under_card);
+                // drag_source(ui, item_id, |ui| {
+                //     image_button!(ui, res.rect, card);
+                // });
+                if let Some(idx) = idx {
+                    let coord = Coord::new(Location::Foundation(col_idx as _), idx as u8);
+                    ui.dnd_drag_source(item_id, coord, |ui| {
                         image_button!(ui, res.rect, card);
-                    }
-                });
+                    });
+                } else {
+                    // non draggable
+                    image_button!(ui, res.rect, card);
+                }
+            });
 
             // the dropped payload is returned if it was dropped on this drop
             // zone, so we know dest is the current column.
@@ -96,6 +94,7 @@ impl App {
             };
             let top_res = image_button!(ui, top_of_deck);
             if top_res.clicked() {
+                println!("trying to turn stock");
                 self.game.do_move(Action::TurnStock);
             }
             if top_res.hovered() {

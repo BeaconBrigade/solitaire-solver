@@ -8,7 +8,7 @@ use std::io::Read;
 use std::str::FromStr;
 
 use eframe::{egui, CreationContext, NativeOptions};
-use egui::{Color32, Frame, Margin, ViewportBuilder};
+use egui::{Color32, DragAndDrop, Frame, Margin, ViewportBuilder};
 use epaint::Vec2;
 use solitaire_game::action::Action;
 use solitaire_game::deck::Deck;
@@ -24,7 +24,14 @@ fn main() -> eframe::Result<()> {
         })),
         ..Default::default()
     };
-    eframe::run_native("Solitaire", opts, Box::new(|cc| Ok(Box::new(App::new(cc)))))?;
+    eframe::run_native(
+        "Solitaire",
+        opts,
+        Box::new(|cc| {
+            cc.egui_ctx.set_theme(egui::Theme::Light);
+            Ok(Box::new(App::new(cc)))
+        }),
+    )?;
 
     Ok(())
 }
@@ -48,8 +55,8 @@ impl App {
             Deck::new_shuffled()
         };
         println!("{}", deck);
-        let game = Solitaire::with_deck(deck);
-
+        let mut game = Solitaire::with_deck(deck);
+        game.do_move(Action::TurnStock);
         let original = game;
         Self { game, original }
     }
@@ -109,6 +116,8 @@ impl eframe::App for App {
 
             if let (Some(coord), Some(dest)) = (source, dest) {
                 if ui.input(|i| i.pointer.any_released()) {
+                    ui.ctx().stop_dragging();
+                    DragAndDrop::clear_payload(ui.ctx());
                     // do the drop:
                     let from = coord;
                     let to = dest;
