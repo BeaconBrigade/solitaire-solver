@@ -5,7 +5,7 @@ use crate::{
     deck::{Card, Deck, Value},
 };
 
-/// Representation of solitary using [K+ solitaire](https://web.engr.oregonstate.edu/~afern/papers/solitaire.pdf)
+/// Representation of Solitaire *not* using [K+ solitaire](https://web.engr.oregonstate.edu/~afern/papers/solitaire.pdf)
 #[derive(Debug, Clone, Copy)]
 pub struct State {
     /// There are seven slots in the tableau. A specific slot
@@ -62,7 +62,7 @@ impl State {
         let mut new = *self;
         match action {
             Action::TurnStock => {
-                // println!("turning stock");
+                println!("turning stock");
                 // make sure the addition doesn't go past 23
                 // convert between float to turn the number to zero if it's negative
                 let remaining = self.talon.2 - 1 - (self.talon.1 as f32 as u8);
