@@ -1,9 +1,12 @@
-use solitaire_game::deck::{Card, Suit, Value};
+use std::collections::HashMap;
 
-pub const BLANK: &str = "file://images/deck/blank.png";
+use macroquad::prelude::*;
+use solitaire_game::deck::{Card, Deck, Suit, Value};
+
+pub const BLANK: &str = "images/deck/blank.png";
 #[allow(unused)]
-pub const POKEMON: &str = "file://images/deck/pokemon_back.png";
-pub const BACK: &str = "file://images/deck/regular_back.png";
+pub const POKEMON: &str = "images/deck/pokemon_back.png";
+pub const BACK: &str = "images/deck/regular_back.png";
 
 /// Converts card to the path to the corresponding image
 pub fn card_to_image(card: Card) -> String {
@@ -29,5 +32,17 @@ pub fn card_to_image(card: Card) -> String {
         Value::King => "king",
     };
 
-    format!("file://images/deck/{val}_of_{suit}.png")
+    format!("images/deck/{val}_of_{suit}.png")
+}
+
+pub async fn initialize_card_textures() -> HashMap<Card, Texture2D> {
+    let mut cache = HashMap::with_capacity(52);
+
+    for card in Deck::default().0 {
+        let im = load_image(&card_to_image(card)).await.unwrap();
+        let tex = Texture2D::from_image(&im);
+        cache.insert(card, tex);
+    }
+
+    cache
 }

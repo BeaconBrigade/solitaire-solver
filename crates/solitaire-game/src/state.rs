@@ -17,10 +17,8 @@ pub struct State {
     pub tableau: [([Option<Card>; 19], u8); 7],
     /// There are four foundation slots each with up to 13 cards
     pub foundation: [[Option<Card>; 13]; 4],
-    /// The deck and talon have at most 24 cards. The second
-    /// first integer represents where face up cards start.
-    /// The second one represents how many cards are in the
-    /// talon.
+    /// The deck and talon have at most 24 cards. The first integer represents where
+    /// face up cards start. The second one represents how many cards are in the talon.
     pub talon: ([Option<Card>; 24], i8, u8),
 }
 

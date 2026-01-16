@@ -30,7 +30,7 @@ impl Default for Deck {
 impl Display for Deck {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for card in self.0 {
-            writeln!(f, "{}", card.to_string()).unwrap();
+            writeln!(f, "{}", card).unwrap();
         }
         Ok(())
     }
@@ -68,6 +68,13 @@ impl Default for Card {
     }
 }
 
+impl std::hash::Hash for Card {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (self.suit as u8).hash(state);
+        (self.value as u8).hash(state);
+    }
+}
+
 impl Card {
     pub const fn new(suit: Suit, value: Value) -> Self {
         Self { suit, value }
@@ -83,7 +90,7 @@ impl Card {
 
 impl Display for Card {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.suit.to_string(), self.value.to_string())
+        write!(f, "{} {}", self.suit, self.value)
     }
 }
 
@@ -99,10 +106,10 @@ impl FromStr for Card {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Suit {
-    Hearts,
-    Spades,
-    Clubs,
-    Diamonds,
+    Hearts = 0,
+    Spades = 1,
+    Clubs = 2,
+    Diamonds = 3,
 }
 
 impl Display for Suit {
