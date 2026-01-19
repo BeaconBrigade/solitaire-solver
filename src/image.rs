@@ -38,7 +38,7 @@ pub fn card_to_image(card: Card) -> String {
 pub async fn initialize_card_textures() -> HashMap<Card, Texture2D> {
     let mut cache = HashMap::with_capacity(52);
 
-    for card in Deck::default().0 {
+    for card in Deck::new_ordered().0 {
         let im = load_image(&card_to_image(card)).await.unwrap();
         let tex = Texture2D::from_image(&im);
         cache.insert(card, tex);

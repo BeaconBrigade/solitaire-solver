@@ -5,7 +5,8 @@ use std::{collections::HashMap, env, fs::File, io::Read, str::FromStr};
 use macroquad::prelude::*;
 use solitaire_game::{
     action::Action,
-    deck::{Card, Deck, Suit, Value},
+    deck::{Card, Deck},
+    state::find_last_idx,
     Solitaire,
 };
 
@@ -62,27 +63,6 @@ async fn main() {
 
     loop {
         clear_background(background_colour);
-
-        let t = card_textures
-            .get(&Card::new(Suit::Spades, Value::Ace))
-            .unwrap();
-        draw_texture_ex(
-            t,
-            screen_width() / 2.0,
-            screen_height() / 2.0,
-            WHITE,
-            params.clone(),
-        );
-        let t = card_textures
-            .get(&Card::new(Suit::Hearts, Value::King))
-            .unwrap();
-        draw_texture_ex(
-            t,
-            screen_width() / 2.0,
-            screen_height() / 2.0 + OVERLAP_OFFSET,
-            WHITE,
-            params.clone(),
-        );
 
         // We'll need to store what is being dragged and the position of everything which isn't
         // dragged. Drop zones will need to be known (and bigger than the clickable areas of each
@@ -149,7 +129,64 @@ async fn main() {
 
         // draw talon
         let talon = &game.state.talon;
-        let _ = todo!();
+        if let Some(top) = talon.0.get(talon.1 as usize).copied().flatten() {
+            let mut offset = 0.0;
+            match talon.1 {
+                -1 | 0 => {
+                    // no cards underneath
+                }
+                1 => {
+                    // one card underneath
+                    draw_texture_ex(
+                        &card_textures[&talon.0[talon.1 as usize - 1].unwrap()],
+                        TALON_START.x,
+                        TALON_START.y,
+                        WHITE,
+                        params.clone(),
+                    );
+                    offset = OVERLAP_OFFSET;
+                }
+                _ => {
+                    // two cards underneath
+                    draw_texture_ex(
+                        &card_textures[&talon.0[talon.1 as usize - 2].unwrap()],
+                        TALON_START.x,
+                        TALON_START.y,
+                        WHITE,
+                        params.clone(),
+                    );
+                    draw_texture_ex(
+                        &card_textures[&talon.0[talon.1 as usize - 2].unwrap()],
+                        TALON_START.x + OVERLAP_OFFSET,
+                        TALON_START.y,
+                        WHITE,
+                        params.clone(),
+                    );
+                    offset = OVERLAP_OFFSET * 2.0;
+                }
+            }
+            let data = card_data[&top];
+            if data.dragged_zone.is_some() {
+                push_first(&mut dragged_list, top);
+            } else {
+                draw_texture_ex(
+                    &card_textures[&top],
+                    TALON_START.x + offset,
+                    TALON_START.y,
+                    WHITE,
+                    params.clone(),
+                );
+            }
+        } else {
+            // no cards
+            draw_texture_ex(
+                &blank_texture,
+                TALON_START.x,
+                TALON_START.y,
+                WHITE,
+                params.clone(),
+            );
+        }
 
         // draw card stock
         if talon.1 as usize == (talon.2 as usize).wrapping_sub(1) {
@@ -170,11 +207,117 @@ async fn main() {
             );
         }
 
+        // draw foundation
+        let mut offset = 0.0;
+        for pile in game.state.foundation.into_iter() {
+            if let Some(i) = find_last_idx(pile.into_iter(), |c| c.is_some()) {
+                let card = pile[i].unwrap();
+                if card_data[&card].dragged_zone.is_some() {
+                    // draw later
+                    push_first(&mut dragged_list, card);
+                    let under_tex = if i > 0 {
+                        &card_textures[&pile[i - 1].unwrap()]
+                    } else {
+                        &blank_texture
+                    };
+                    draw_texture_ex(
+                        under_tex,
+                        FOUNDATION_START.x + offset,
+                        FOUNDATION_START.y,
+                        WHITE,
+                        params.clone(),
+                    );
+                } else {
+                    // card should be drawn normally
+                    draw_texture_ex(
+                        &card_textures[&card],
+                        FOUNDATION_START.x + offset,
+                        FOUNDATION_START.y,
+                        WHITE,
+                        params.clone(),
+                    );
+                }
+            } else {
+                draw_texture_ex(
+                    &blank_texture,
+                    FOUNDATION_START.x + offset,
+                    FOUNDATION_START.y,
+                    WHITE,
+                    params.clone(),
+                );
+            }
+            offset += HORIZONTAL_OFFSET;
+        }
+
+        // draw tableau
+        let mut x_offset = 0.0;
+        for pile in game.state.tableau {
+            let max_idx = find_last_idx(pile.0.into_iter(), |c| c.is_some());
+            let Some(max_idx) = max_idx else {
+                // no cards in pile
+                draw_texture_ex(
+                    &blank_texture,
+                    TABLEAU_START.x + x_offset,
+                    TABLEAU_START.y,
+                    WHITE,
+                    params.clone(),
+                );
+                continue;
+            };
+            let mut y_offset = 0.0;
+            // draw turned down cards
+            for _ in pile.0[0..pile.1 as usize].iter().flatten() {
+                draw_texture_ex(
+                    &back_texture,
+                    TABLEAU_START.x + x_offset,
+                    TABLEAU_START.y + y_offset,
+                    WHITE,
+                    params.clone(),
+                );
+                y_offset += OVERLAP_OFFSET;
+            }
+            // draw face up cards
+            for (i, c) in pile.0[pile.1 as usize..=max_idx]
+                .iter()
+                .flatten()
+                .enumerate()
+            {
+                // every card below the dragged one must also be dragged
+                if card_data[c].dragged_zone.is_some() {
+                    dragged_list.copy_from_slice(&pile.0[i..=max_idx]);
+                    break;
+                }
+                draw_texture_ex(
+                    &card_textures[c],
+                    TABLEAU_START.x + x_offset,
+                    TABLEAU_START.y + y_offset,
+                    WHITE,
+                    params.clone(),
+                );
+            }
+
+            x_offset += HORIZONTAL_OFFSET;
+        }
+
+        // draw dragged cards
+        let mut y_offset = 0.0;
+        for c in dragged_list.iter().flatten() {
+            let d = card_data[c];
+            draw_texture_ex(
+                &card_textures[c],
+                d.dragged_zone.unwrap().x,
+                d.dragged_zone.unwrap().y + y_offset,
+                WHITE,
+                params.clone(),
+            );
+            y_offset += OVERLAP_OFFSET;
+        }
+
         next_frame().await;
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 struct CardData {
     pub dragged_zone: Option<Vec2>,
     pub clickable_zone: Option<Rect>,
@@ -194,13 +337,14 @@ const COVERED_CARD_SIZE: Vec2 = Vec2 {
 };
 
 const TOP_OFFSET: f32 = CARD_SIZE.y * 0.29;
+const HORIZONTAL_OFFSET: f32 = CARD_SIZE.x * 1.29;
 const FOUNDATION_START: Vec2 = Vec2 {
     x: CARD_SIZE.x,
     y: TOP_OFFSET,
 };
 const TABLEAU_START: Vec2 = Vec2 {
     x: CARD_SIZE.x,
-    y: CARD_SIZE.y * 5.0,
+    y: CARD_SIZE.y * 2.5,
 };
 // two card lengths from the right
 const STOCK_START: Vec2 = Vec2 {
@@ -208,7 +352,7 @@ const STOCK_START: Vec2 = Vec2 {
     y: TOP_OFFSET,
 };
 const TALON_START: Vec2 = Vec2 {
-    x: STOCK_START.x - CARD_SIZE.x * (1.0 + OVERLAP_OFFSET * 2.0),
+    x: STOCK_START.x - OVERLAP_OFFSET * 3.0 - HORIZONTAL_OFFSET,
     y: TOP_OFFSET,
 };
 
@@ -250,10 +394,10 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
 
         // update last card to have full clickable zone
         if let Some(card) = prev {
-            map.get_mut(card).unwrap().clickable_zone.unwrap().y = CARD_SIZE.y;
+            map.get_mut(card).unwrap().clickable_zone.unwrap().h = CARD_SIZE.y;
         }
 
-        current_zone.x += CARD_SIZE.x * 1.29;
+        current_zone.x += HORIZONTAL_OFFSET;
         current_zone.y = TABLEAU_START.y;
     }
 
@@ -265,4 +409,13 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
     );
 
     map
+}
+
+fn push_first(arr: &mut [Option<Card>; 13], item: Card) {
+    for (i, c) in arr.iter().enumerate() {
+        if c.is_none() {
+            arr[i] = Some(item);
+            return;
+        }
+    }
 }
