@@ -288,6 +288,42 @@ impl State {
         };
         self
     }
+
+    pub fn get_coord(&self, card: Card) -> Option<Coord> {
+        // search talon
+        for (i, c) in self.talon.0.iter().flatten().enumerate() {
+            if *c == card {
+                return Some(Coord {
+                    location: Location::Talon,
+                    idx: i as u8,
+                });
+            }
+        }
+        // search foundation
+        for (p, pile) in self.foundation.iter().enumerate() {
+            for (i, c) in pile.iter().flatten().enumerate() {
+                if *c == card {
+                    return Some(Coord {
+                        location: Location::Foundation(p as u8),
+                        idx: i as u8,
+                    });
+                }
+            }
+        }
+        // search tableau
+        for (p, pile) in self.tableau.iter().enumerate() {
+            for (i, c) in pile.0.iter().flatten().enumerate() {
+                if *c == card {
+                    return Some(Coord {
+                        location: Location::Tableau(p as u8),
+                        idx: i as u8,
+                    });
+                }
+            }
+        }
+
+        None
+    }
 }
 
 fn iter_to_arr<const N: usize, T: Copy>(iter: &mut impl Iterator<Item = T>) -> [Option<T>; N] {

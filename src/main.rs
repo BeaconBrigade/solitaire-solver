@@ -4,7 +4,7 @@ use std::{collections::HashMap, env, fs::File, io::Read, str::FromStr};
 
 use macroquad::prelude::*;
 use solitaire_game::{
-    action::Action,
+    action::{Action, Coord, Location},
     deck::{Card, Deck},
     state::find_last_idx,
     Solitaire,
@@ -91,8 +91,11 @@ async fn main() {
         //
 
         // handling user input
-        //   if mouse down but no dragged card
-        //     add card to dragged_root
+        //   if mouse down
+        //     if drag_root is None
+        //         find drag_root using clickable_zone
+        //     set dragged_root's dragged_zone to cursor location
+        //     set each child of dragged_root's dragged_zone relative to dragged_root
         //   else if mouse up but dragged card
         //     perform move action
         //     for each card in dragged_list
@@ -101,12 +104,102 @@ async fn main() {
         //     set dragged_root to None
         //   clear dragged_list
         //
-        //   for each card
-        //     if card is dragged_root then
-        //         update dragged_zone to cursor location
-        //     else if card is child of dragged_root then
-        //         update dragged_zone cursor + offset (based of order of being dragged) (guaranteed cards will come up in order)
-        //
+
+        // handle user input
+        if is_mouse_button_down(MouseButton::Left) {
+            match dragged_root {
+                Some(r) => {
+                    // update dragged_pos for each pulled card
+                    println!("holding currently: {r:?}");
+                    let (x, y) = mouse_position();
+                    let mut m = Vec2 { x, y };
+                    card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
+                    for child in dragged_list[1..].iter().flatten() {
+                        m.y += OVERLAP_OFFSET;
+                        card_data.get_mut(child).unwrap().dragged_pos = Some(m);
+                    }
+                }
+                None => {
+                    // set up dragged_pos for each dragged card
+                    let r = find_cursor_hover(&game, &card_data);
+                    dragged_root = r;
+                    let coord = r.and_then(|c| game.state.get_coord(c));
+                    println!("hovering over: {r:?}, coord: {coord:?}");
+                    if let (Some(coord), Some(r)) = (coord, r) {
+                        let (x, y) = mouse_position();
+                        let mut m = Vec2 { x, y };
+                        card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
+                        match coord.location {
+                            Location::Foundation(_) => {
+                                // no cards can be pulled along
+                            }
+                            Location::Talon => {
+                                // no cards can be pulled along
+                            }
+                            Location::Tableau(i) => {
+                                println!("adding to tableau {i}, idx={}", coord.idx);
+                                let pile = game.state.tableau[i as usize];
+                                // move all cards starting from after dragged_root
+                                for child in pile.0[coord.idx as usize + 1..].iter().flatten() {
+                                    println!("adding {child:?}");
+                                    m.y += OVERLAP_OFFSET;
+                                    card_data.get_mut(child).unwrap().dragged_pos = Some(m);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if let Some(root) = dragged_root {
+            // mouse is up, but we have a dragged root, so we should make a move
+            let (x, y) = mouse_position();
+            let m = Vec2 { x, y };
+            for (rect, coord) in DROP_MAP {
+                if rect.contains(m) {
+                    let mut to_coord = coord;
+                    match coord.location {
+                        Location::Foundation(i) => {
+                            to_coord.idx =
+                                find_last_idx(game.state.foundation[i as usize].iter(), |c| {
+                                    c.is_some()
+                                })
+                                .map(|i| i + 1)
+                                .unwrap_or(0) as u8;
+                        }
+                        Location::Tableau(i) => {
+                            to_coord.idx =
+                                find_last_idx(game.state.tableau[i as usize].0.into_iter(), |c| {
+                                    c.is_some()
+                                })
+                                .map(|i| (i + 1) as u8)
+                                .unwrap_or(0) as u8;
+                        }
+                        _ => unreachable!(),
+                    }
+                    let from_coord = game.state.get_coord(root).unwrap();
+                    game.do_move(Action::Move(from_coord, to_coord));
+
+                    for card in dragged_list.iter().flatten() {
+                        let d = card_data.get_mut(card).unwrap();
+                        d.dragged_pos = None;
+                        d.clickable_zone = coord_to_clickable(&game, coord);
+                    }
+                    break;
+                }
+            }
+
+            dragged_root = None;
+        } else {
+            let (x, y) = mouse_position();
+            let m = Vec2 { x, y };
+            for (rect, _) in DROP_MAP {
+                if rect.contains(m) {
+                    // want to make grabby cursor
+                    break;
+                }
+            }
+        }
+        clear_list(&mut dragged_list);
 
         // drawing
         //   for each card
@@ -115,7 +208,7 @@ async fn main() {
         //       else
         //           draw at normal zone
         //   for each dragged card
-        //       draw at dragged_zone
+        //       draw at dragged_pos
         //
         // normal zone is based from whether we're in:
         //   talon, foundation, tableau
@@ -166,7 +259,7 @@ async fn main() {
                 }
             }
             let data = card_data[&top];
-            if data.dragged_zone.is_some() {
+            if data.dragged_pos.is_some() {
                 push_first(&mut dragged_list, top);
             } else {
                 draw_texture_ex(
@@ -212,7 +305,7 @@ async fn main() {
         for pile in game.state.foundation.into_iter() {
             if let Some(i) = find_last_idx(pile.into_iter(), |c| c.is_some()) {
                 let card = pile[i].unwrap();
-                if card_data[&card].dragged_zone.is_some() {
+                if card_data[&card].dragged_pos.is_some() {
                     // draw later
                     push_first(&mut dragged_list, card);
                     let under_tex = if i > 0 {
@@ -283,8 +376,10 @@ async fn main() {
                 .enumerate()
             {
                 // every card below the dragged one must also be dragged
-                if card_data[c].dragged_zone.is_some() {
-                    dragged_list.copy_from_slice(&pile.0[i..=max_idx]);
+                if card_data[c].dragged_pos.is_some() {
+                    // println!("moving into dragged_list start={:?}, end={:?}: {:?}", pile.1 as usize + i, max_idx, &pile.0[pile.1 as usize + i..=max_idx]);
+                    dragged_list[0..=max_idx - i - pile.1 as usize]
+                        .copy_from_slice(&pile.0[pile.1 as usize + i..=max_idx]);
                     break;
                 }
                 draw_texture_ex(
@@ -300,17 +395,16 @@ async fn main() {
         }
 
         // draw dragged cards
-        let mut y_offset = 0.0;
         for c in dragged_list.iter().flatten() {
+            println!("drawing dragged cards: {dragged_list:?}");
             let d = card_data[c];
             draw_texture_ex(
                 &card_textures[c],
-                d.dragged_zone.unwrap().x,
-                d.dragged_zone.unwrap().y + y_offset,
+                d.dragged_pos.unwrap().x,
+                d.dragged_pos.unwrap().y,
                 WHITE,
                 params.clone(),
             );
-            y_offset += OVERLAP_OFFSET;
         }
 
         next_frame().await;
@@ -319,7 +413,7 @@ async fn main() {
 
 #[derive(Debug, Default, Clone, Copy)]
 struct CardData {
-    pub dragged_zone: Option<Vec2>,
+    pub dragged_pos: Option<Vec2>,
     pub clickable_zone: Option<Rect>,
 }
 
@@ -356,6 +450,143 @@ const TALON_START: Vec2 = Vec2 {
     y: TOP_OFFSET,
 };
 
+const DROP_MAP: [(Rect, Coord); 11] = [
+    // foundations
+    (
+        Rect {
+            x: FOUNDATION_START.x,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(0),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(1),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * 2.0,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(2),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * 3.0,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(3),
+            idx: 0,
+        },
+    ),
+    // tableau
+    (
+        Rect {
+            x: TABLEAU_START.x,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(0),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(1),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 2.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(2),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 3.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(3),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 4.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(4),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 5.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(5),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 6.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(6),
+            idx: 0,
+        },
+    ),
+];
+
 fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
     let mut map = HashMap::with_capacity(52);
 
@@ -379,7 +610,7 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
         for card in column.0.iter().skip(column.1 as usize).flatten() {
             prev = Some(card);
             let d = CardData {
-                dragged_zone: None,
+                dragged_pos: None,
                 clickable_zone: Some(Rect {
                     x: current_zone.x,
                     y: current_zone.y,
@@ -418,4 +649,49 @@ fn push_first(arr: &mut [Option<Card>; 13], item: Card) {
             return;
         }
     }
+}
+
+fn clear_list(dragged_list: &mut [Option<Card>; 13]) {
+    for c in dragged_list.iter_mut() {
+        *c = None;
+    }
+}
+
+fn find_cursor_hover(game: &Solitaire, card_data: &HashMap<Card, CardData>) -> Option<Card> {
+    let state = game.state;
+    // search talon
+    for c in state.talon.0.iter().flatten() {
+        let (x, y) = mouse_position();
+        let m = Vec2 { x, y };
+        if card_data[c].clickable_zone.is_some_and(|z| z.contains(m)) {
+            return Some(*c);
+        }
+    }
+    // search foundation
+    for pile in state.foundation.iter() {
+        for c in pile.iter().flatten() {
+            let (x, y) = mouse_position();
+            let m = Vec2 { x, y };
+            if card_data[c].clickable_zone.is_some_and(|z| z.contains(m)) {
+                return Some(*c);
+            }
+        }
+    }
+    // search tableau
+    for pile in state.tableau.iter() {
+        for c in pile.0.iter().flatten() {
+            let (x, y) = mouse_position();
+            let m = Vec2 { x, y };
+            if card_data[c].clickable_zone.is_some_and(|z| z.contains(m)) {
+                return Some(*c);
+            }
+        }
+    }
+
+    None
+}
+
+/// converts a coordinate to a card's clickable zone (if it has one)
+fn coord_to_clickable(game: &Solitaire, coord: Coord) -> Option<Rect> {
+    todo!()
 }
