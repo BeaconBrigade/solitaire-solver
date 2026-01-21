@@ -230,9 +230,7 @@ async fn main() {
                                             card_data[&under].clickable_zone.unwrap().h
                                         );
                                         // if there's a card directly under us, it must be face up
-                                        let d = card_data
-                                            .get_mut(&under)
-                                            .unwrap();
+                                        let d = card_data.get_mut(&under).unwrap();
                                         // weird workaround to ensure the mutation occurs not on a
                                         // copy
                                         let mut z = d.clickable_zone.unwrap();
@@ -726,19 +724,21 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
 
     // in case of cooked variations which have cards in the foundation to start
     for (p, pile) in game.state.foundation.iter().enumerate() {
-        let mut j = 0;
+        let mut j = None;
         for (i, card) in pile.iter().flatten().enumerate() {
             map.insert(*card, CardData::default());
-            j = i;
+            j = Some(i);
         }
-        map.get_mut(&game.state.foundation[p][j].unwrap())
-            .unwrap()
-            .clickable_zone = Some(Rect {
-            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
-            y: FOUNDATION_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y,
-        });
+        if let Some(j) = j {
+            map.get_mut(&game.state.foundation[p][j].unwrap())
+                .unwrap()
+                .clickable_zone = Some(Rect {
+                x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
+                y: FOUNDATION_START.y,
+                w: CARD_SIZE.x,
+                h: CARD_SIZE.y,
+            });
+        }
     }
 
     // foundation will have no cards
