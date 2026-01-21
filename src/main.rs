@@ -124,13 +124,11 @@ async fn main() {
                 card_data.get_mut(&card).unwrap().clickable_zone = None;
             }
             game.do_move(Action::TurnStock);
-            println!("updating talon clickable");
             update_clickable_of_talon(&game, &mut card_data);
         } else if is_mouse_button_down(MouseButton::Left) {
             match dragged_root {
                 Some(r) => {
                     // update dragged_pos for each pulled card
-                    // println!("holding currently: {r:?}");
                     let (x, y) = mouse_position();
                     let mut m = Vec2 { x, y };
                     card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
@@ -144,7 +142,6 @@ async fn main() {
                     let r = find_cursor_hover(&game, &card_data);
                     dragged_root = r;
                     let coord = r.and_then(|c| game.state.get_coord(c));
-                    // println!("hovering over: {r:?}, coord: {coord:?}");
                     if let (Some(coord), Some(r)) = (coord, r) {
                         let (x, y) = mouse_position();
                         let mut m = Vec2 { x, y };
@@ -158,11 +155,9 @@ async fn main() {
                                 // no cards can be pulled along
                             }
                             Location::Tableau(i) => {
-                                println!("adding to tableau {i}, idx={}", coord.idx);
                                 let pile = game.state.tableau[i as usize];
                                 // move all cards starting from after dragged_root
                                 for child in pile.0[coord.idx as usize + 1..].iter().flatten() {
-                                    println!("adding {child:?}");
                                     m.y += OVERLAP_OFFSET;
                                     card_data.get_mut(child).unwrap().dragged_pos = Some(m);
                                     // card_data.get_mut(child).unwrap().clickable_zone = None;
@@ -220,15 +215,9 @@ async fn main() {
                                 Location::Tableau(_) => {
                                     // if there's a card under
                                     if actual_coord.idx > 0 {
-                                        println!("updating below");
                                         let mut under_coord = actual_coord;
                                         under_coord.idx -= 1;
                                         let under = game.state.get(under_coord).unwrap();
-                                        println!("updating below: under={under:?}");
-                                        println!(
-                                            "before: {:?}",
-                                            card_data[&under].clickable_zone.unwrap().h
-                                        );
                                         // if there's a card directly under us, it must be face up
                                         let d = card_data.get_mut(&under).unwrap();
                                         // weird workaround to ensure the mutation occurs not on a
@@ -236,10 +225,6 @@ async fn main() {
                                         let mut z = d.clickable_zone.unwrap();
                                         z.h = OVERLAP_OFFSET;
                                         d.clickable_zone = Some(z);
-                                        println!(
-                                            "after: {:?}",
-                                            card_data[&under].clickable_zone.unwrap().h
-                                        );
                                     }
                                 }
                                 // we can't move into the talon
@@ -479,7 +464,6 @@ async fn main() {
 
         // draw dragged cards
         for c in dragged_list.iter().flatten() {
-            // println!("drawing dragged cards: {dragged_list:?}");
             let d = card_data[c];
             draw_texture_ex(
                 &card_textures[c],
@@ -500,9 +484,9 @@ struct CardData {
     pub clickable_zone: Option<Rect>,
 }
 
-const SCREEN_WIDTH: i32 = 1000;
-const SCREEN_HEIGHT: i32 = 667;
-const K: f32 = 1.25;
+const SCREEN_WIDTH: i32 = 1200;
+const SCREEN_HEIGHT: i32 = 850;
+const K: f32 = 1.50;
 const CARD_SIZE: Vec2 = Vec2 {
     x: K * 50.0,
     y: K * 72.6,
@@ -715,7 +699,10 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
 
         // update last card to have full clickable zone
         if let Some(card) = prev {
-            map.get_mut(card).unwrap().clickable_zone.unwrap().h = CARD_SIZE.y;
+            let d = map.get_mut(card).unwrap();
+            let mut z = d.clickable_zone.unwrap();
+            z.h = CARD_SIZE.y;
+            d.clickable_zone = Some(z);
         }
 
         current_zone.x += HORIZONTAL_OFFSET;
@@ -878,7 +865,6 @@ fn update_clickable_of_from(
     card_data: &mut HashMap<Card, CardData>,
     from_coord: Coord,
 ) {
-    println!("updating clickable of {from_coord:?}");
     match from_coord.location {
         Location::Foundation(p) => {
             // could potentially use from_coord.idx -1 for foundation, but I'm lazy
