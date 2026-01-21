@@ -65,11 +65,12 @@ impl State {
                 // println!("turning stock");
                 // make sure the addition doesn't go past 23
                 // convert between float to turn the number to zero if it's negative
-                let remaining = self.talon.2 - 1 - (self.talon.1 as f32 as u8);
+                // remaining = total - 1 - shown
+                let remaining = self.talon.2 as i8 - 1 - self.talon.1;
                 if remaining == 0 {
                     new.talon.1 = -1;
                 } else {
-                    new.talon.1 += cmp::min(3, remaining as i8);
+                    new.talon.1 += cmp::min(3, remaining);
                 }
             }
             Action::Move(from, to) => {
