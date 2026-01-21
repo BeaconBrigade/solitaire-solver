@@ -327,7 +327,7 @@ impl State {
     }
 }
 
-fn iter_to_arr<const N: usize, T: Copy>(iter: &mut impl Iterator<Item = T>) -> [Option<T>; N] {
+pub fn iter_to_arr<const N: usize, T: Copy>(iter: &mut impl Iterator<Item = T>) -> [Option<T>; N] {
     let mut a = [None; N];
     a.iter_mut()
         .take(N)
