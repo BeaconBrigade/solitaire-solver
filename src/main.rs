@@ -203,9 +203,52 @@ async fn main() {
                     update_clickable_of_from(&game, &mut card_data, from_coord);
 
                     for card in dragged_list.iter().flatten() {
-                        let d = card_data.get_mut(card).unwrap();
                         // make sure we get the right coord in case the move was invalid
                         let actual_coord = game.state.get_coord(*card).unwrap();
+                        // update clickable_zone of card under us we actually moved
+                        if actual_coord == to_coord {
+                            match actual_coord.location {
+                                Location::Foundation(_) => {
+                                    // if there's a card under
+                                    if actual_coord.idx > 0 {
+                                        let mut under_coord = actual_coord;
+                                        under_coord.idx -= 1;
+                                        let under = game.state.get(under_coord).unwrap();
+                                        card_data.get_mut(&under).unwrap().clickable_zone = None;
+                                    }
+                                }
+                                Location::Tableau(_) => {
+                                    // if there's a card under
+                                    if actual_coord.idx > 0 {
+                                        println!("updating below");
+                                        let mut under_coord = actual_coord;
+                                        under_coord.idx -= 1;
+                                        let under = game.state.get(under_coord).unwrap();
+                                        println!("updating below: under={under:?}");
+                                        println!(
+                                            "before: {:?}",
+                                            card_data[&under].clickable_zone.unwrap().h
+                                        );
+                                        // if there's a card directly under us, it must be face up
+                                        let d = card_data
+                                            .get_mut(&under)
+                                            .unwrap();
+                                        // weird workaround to ensure the mutation occurs not on a
+                                        // copy
+                                        let mut z = d.clickable_zone.unwrap();
+                                        z.h = OVERLAP_OFFSET;
+                                        d.clickable_zone = Some(z);
+                                        println!(
+                                            "after: {:?}",
+                                            card_data[&under].clickable_zone.unwrap().h
+                                        );
+                                    }
+                                }
+                                // we can't move into the talon
+                                Location::Talon => unreachable!(),
+                            }
+                        }
+                        let d = card_data.get_mut(card).unwrap();
                         d.clickable_zone = coord_to_clickable(&game, actual_coord);
                         to_coord.idx += 1;
                     }
@@ -679,6 +722,23 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
 
         current_zone.x += HORIZONTAL_OFFSET;
         current_zone.y = TABLEAU_START.y;
+    }
+
+    // in case of cooked variations which have cards in the foundation to start
+    for (p, pile) in game.state.foundation.iter().enumerate() {
+        let mut j = 0;
+        for (i, card) in pile.iter().flatten().enumerate() {
+            map.insert(*card, CardData::default());
+            j = i;
+        }
+        map.get_mut(&game.state.foundation[p][j].unwrap())
+            .unwrap()
+            .clickable_zone = Some(Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        });
     }
 
     // foundation will have no cards
