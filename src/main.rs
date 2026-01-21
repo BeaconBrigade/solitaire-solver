@@ -52,7 +52,6 @@ async fn main() {
     };
     println!("{}", deck);
     let mut game = Solitaire::with_deck(deck);
-    game.do_move(Action::TurnStock);
 
     // stores dragged card
     let mut dragged_root: Option<Card> = None;
@@ -106,11 +105,32 @@ async fn main() {
         //
 
         // handle user input
-        if is_mouse_button_down(MouseButton::Left) {
+        let (x, y) = mouse_position();
+        let m = Vec2 { x, y };
+        // check for talon button clicks
+        if dragged_root.is_none()
+            && is_mouse_button_pressed(MouseButton::Left)
+            && TALON_BUTTON.contains(m)
+        {
+            // unset previous clickable zone
+            if let Some(card) = game
+                .state
+                .talon
+                .0
+                .get(game.state.talon.1 as usize)
+                .copied()
+                .flatten()
+            {
+                card_data.get_mut(&card).unwrap().clickable_zone = None;
+            }
+            game.do_move(Action::TurnStock);
+            println!("updating talon clickable");
+            update_clickable_of_talon(&game, &mut card_data);
+        } else if is_mouse_button_down(MouseButton::Left) {
             match dragged_root {
                 Some(r) => {
                     // update dragged_pos for each pulled card
-                    println!("holding currently: {r:?}");
+                    // println!("holding currently: {r:?}");
                     let (x, y) = mouse_position();
                     let mut m = Vec2 { x, y };
                     card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
@@ -124,11 +144,12 @@ async fn main() {
                     let r = find_cursor_hover(&game, &card_data);
                     dragged_root = r;
                     let coord = r.and_then(|c| game.state.get_coord(c));
-                    println!("hovering over: {r:?}, coord: {coord:?}");
+                    // println!("hovering over: {r:?}, coord: {coord:?}");
                     if let (Some(coord), Some(r)) = (coord, r) {
                         let (x, y) = mouse_position();
                         let mut m = Vec2 { x, y };
                         card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
+                        // card_data.get_mut(&r).unwrap().clickable_zone = None;
                         match coord.location {
                             Location::Foundation(_) => {
                                 // no cards can be pulled along
@@ -144,6 +165,7 @@ async fn main() {
                                     println!("adding {child:?}");
                                     m.y += OVERLAP_OFFSET;
                                     card_data.get_mut(child).unwrap().dragged_pos = Some(m);
+                                    // card_data.get_mut(child).unwrap().clickable_zone = None;
                                 }
                             }
                         }
@@ -178,26 +200,27 @@ async fn main() {
                     }
                     let from_coord = game.state.get_coord(root).unwrap();
                     game.do_move(Action::Move(from_coord, to_coord));
+                    update_clickable_of_from(&game, &mut card_data, from_coord);
 
                     for card in dragged_list.iter().flatten() {
                         let d = card_data.get_mut(card).unwrap();
-                        d.dragged_pos = None;
-                        d.clickable_zone = coord_to_clickable(&game, coord);
+                        // make sure we get the right coord in case the move was invalid
+                        let actual_coord = game.state.get_coord(*card).unwrap();
+                        d.clickable_zone = coord_to_clickable(&game, actual_coord);
+                        to_coord.idx += 1;
                     }
                     break;
                 }
             }
 
-            dragged_root = None;
-        } else {
-            let (x, y) = mouse_position();
-            let m = Vec2 { x, y };
-            for (rect, _) in DROP_MAP {
-                if rect.contains(m) {
-                    // want to make grabby cursor
-                    break;
-                }
+            // stop dragging all the cards regardless of if the move
+            // was correct
+            for card in dragged_list.iter().flatten() {
+                let d = card_data.get_mut(card).unwrap();
+                d.dragged_pos = None;
             }
+
+            dragged_root = None;
         }
         clear_list(&mut dragged_list);
 
@@ -249,7 +272,7 @@ async fn main() {
                         params.clone(),
                     );
                     draw_texture_ex(
-                        &card_textures[&talon.0[talon.1 as usize - 2].unwrap()],
+                        &card_textures[&talon.0[talon.1 as usize - 1].unwrap()],
                         TALON_START.x + OVERLAP_OFFSET,
                         TALON_START.y,
                         WHITE,
@@ -355,8 +378,19 @@ async fn main() {
                     WHITE,
                     params.clone(),
                 );
+                x_offset += HORIZONTAL_OFFSET;
                 continue;
             };
+            if max_idx == 0 || dragged_root == pile.0[0] {
+                // draw underneath texture if we're dragging
+                draw_texture_ex(
+                    &blank_texture,
+                    TABLEAU_START.x + x_offset,
+                    TABLEAU_START.y,
+                    WHITE,
+                    params.clone(),
+                );
+            }
             let mut y_offset = 0.0;
             // draw turned down cards
             for _ in pile.0[0..pile.1 as usize].iter().flatten() {
@@ -377,7 +411,6 @@ async fn main() {
             {
                 // every card below the dragged one must also be dragged
                 if card_data[c].dragged_pos.is_some() {
-                    // println!("moving into dragged_list start={:?}, end={:?}: {:?}", pile.1 as usize + i, max_idx, &pile.0[pile.1 as usize + i..=max_idx]);
                     dragged_list[0..=max_idx - i - pile.1 as usize]
                         .copy_from_slice(&pile.0[pile.1 as usize + i..=max_idx]);
                     break;
@@ -389,6 +422,7 @@ async fn main() {
                     WHITE,
                     params.clone(),
                 );
+                y_offset += OVERLAP_OFFSET;
             }
 
             x_offset += HORIZONTAL_OFFSET;
@@ -396,7 +430,7 @@ async fn main() {
 
         // draw dragged cards
         for c in dragged_list.iter().flatten() {
-            println!("drawing dragged cards: {dragged_list:?}");
+            // println!("drawing dragged cards: {dragged_list:?}");
             let d = card_data[c];
             draw_texture_ex(
                 &card_textures[c],
@@ -587,6 +621,13 @@ const DROP_MAP: [(Rect, Coord); 11] = [
     ),
 ];
 
+const TALON_BUTTON: Rect = Rect {
+    x: STOCK_START.x,
+    y: STOCK_START.y,
+    w: CARD_SIZE.x,
+    h: CARD_SIZE.y,
+};
+
 fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
     let mut map = HashMap::with_capacity(52);
 
@@ -693,5 +734,147 @@ fn find_cursor_hover(game: &Solitaire, card_data: &HashMap<Card, CardData>) -> O
 
 /// converts a coordinate to a card's clickable zone (if it has one)
 fn coord_to_clickable(game: &Solitaire, coord: Coord) -> Option<Rect> {
-    todo!()
+    match coord.location {
+        Location::Foundation(p) => {
+            // only the top card has a clickable zone
+            let last = find_last_idx(game.state.foundation[p as usize].into_iter(), |c| {
+                c.is_some()
+            });
+            if Some(coord.idx as usize) == last {
+                Some(Rect {
+                    x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
+                    y: FOUNDATION_START.y,
+                    w: CARD_SIZE.x,
+                    h: CARD_SIZE.y,
+                })
+            } else {
+                None
+            }
+        }
+        Location::Tableau(p) => {
+            let first_face_up = game.state.tableau[p as usize].1;
+            let last = find_last_idx(game.state.tableau[p as usize].0.into_iter(), |c| {
+                c.is_some()
+            });
+            if let Some(last) = last {
+                let mut candidate = Rect {
+                    x: TABLEAU_START.x + HORIZONTAL_OFFSET * p as f32,
+                    y: TABLEAU_START.y + OVERLAP_OFFSET * coord.idx as f32,
+                    w: CARD_SIZE.x,
+                    h: 0.0,
+                };
+                if coord.idx < first_face_up {
+                    // face down
+                    None
+                } else if coord.idx as usize == last {
+                    // last card so full hitbox
+                    candidate.h = CARD_SIZE.y;
+                    Some(candidate)
+                } else {
+                    // otherwise we're a middle card which has partial hitbox
+                    candidate.h = OVERLAP_OFFSET;
+                    Some(candidate)
+                }
+            } else {
+                // no cards in this pile
+                None
+            }
+        }
+        Location::Talon => {
+            // if we're the visible card
+            if coord.idx as i8 == game.state.talon.1 {
+                let offset = match game.state.talon.1 {
+                    // will be all the way to the left so no offset
+                    -1 | 0 => 0.0,
+                    // will be one card to the right
+                    1 => OVERLAP_OFFSET,
+
+                    // will be two cards to the right
+                    _ => OVERLAP_OFFSET * 2.0,
+                };
+                Some(Rect {
+                    x: TALON_START.x + offset,
+                    y: TALON_START.y,
+                    w: CARD_SIZE.x,
+                    h: CARD_SIZE.y,
+                })
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn update_clickable_of_from(
+    game: &Solitaire,
+    card_data: &mut HashMap<Card, CardData>,
+    from_coord: Coord,
+) {
+    println!("updating clickable of {from_coord:?}");
+    match from_coord.location {
+        Location::Foundation(p) => {
+            // could potentially use from_coord.idx -1 for foundation, but I'm lazy
+            if let Some(last) =
+                find_last_idx(game.state.foundation[p as usize].iter(), |c| c.is_some())
+            {
+                let clickable_zone = Rect {
+                    x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
+                    y: FOUNDATION_START.y,
+                    w: CARD_SIZE.x,
+                    h: CARD_SIZE.y,
+                };
+                let card = game.state.foundation[p as usize][last].unwrap();
+                card_data.get_mut(&card).unwrap().clickable_zone = Some(clickable_zone);
+            }
+        }
+        Location::Tableau(p) => {
+            // the new card is guaranteed to be unveiled so no need of tableau[p].1
+            if let Some(last) =
+                find_last_idx(game.state.tableau[p as usize].0.iter(), |c| c.is_some())
+            {
+                if from_coord.idx == 0 {
+                    return;
+                }
+                let clickable_zone = Rect {
+                    x: TABLEAU_START.x + HORIZONTAL_OFFSET * p as f32,
+                    y: TABLEAU_START.y + OVERLAP_OFFSET * (from_coord.idx - 1) as f32,
+                    w: CARD_SIZE.x,
+                    // we know at most one card will become uncovered after a move:
+                    // either a card has been turned up, or a face up card has been
+                    // revealed. so we only have to update this card to have full
+                    // height clickable zone.
+                    h: CARD_SIZE.y,
+                };
+                let card = game.state.tableau[p as usize].0[last].unwrap();
+                card_data.get_mut(&card).unwrap().clickable_zone = Some(clickable_zone);
+            }
+        }
+        Location::Talon => {
+            update_clickable_of_talon(game, card_data);
+        }
+    }
+}
+
+fn update_clickable_of_talon(game: &Solitaire, card_data: &mut HashMap<Card, CardData>) {
+    let offset = match game.state.talon.1 {
+        // nothing clickable in the talon
+        -1 => return,
+        // will be all the way to the left so no offset
+        0 => 0.0,
+        // will be one card to the right
+        1 => OVERLAP_OFFSET,
+        // will be two cards to the right
+        _ => OVERLAP_OFFSET * 2.0,
+    };
+    let talon = game.state.talon;
+    let card = talon.0[talon.1 as usize];
+    if let Some(card) = card {
+        let clickable_zone = Rect {
+            x: TALON_START.x + offset,
+            y: TALON_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        };
+        card_data.get_mut(&card).unwrap().clickable_zone = Some(clickable_zone);
+    }
 }
