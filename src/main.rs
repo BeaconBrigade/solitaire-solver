@@ -247,6 +247,14 @@ async fn main() {
         let talon = &game.state.talon;
         if let Some(top) = talon.0.get(talon.1 as usize).copied().flatten() {
             let mut offset = 0.0;
+            // draw underneath texture
+            draw_texture_ex(
+                &blank_texture,
+                TALON_START.x,
+                TALON_START.y,
+                WHITE,
+                params.clone(),
+            );
             match talon.1 {
                 -1 | 0 => {
                     // no cards underneath
