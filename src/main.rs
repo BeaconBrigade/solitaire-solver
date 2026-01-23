@@ -112,17 +112,6 @@ async fn main() {
             && is_mouse_button_pressed(MouseButton::Left)
             && TALON_BUTTON.contains(m)
         {
-            // unset previous clickable zone
-            if let Some(card) = game
-                .state
-                .talon
-                .0
-                .get(game.state.talon.1 as usize)
-                .copied()
-                .flatten()
-            {
-                card_data.get_mut(&card).unwrap().clickable_zone = None;
-            }
             game.do_move(Action::TurnStock);
             update_clickable_of_talon(&game, &mut card_data);
         } else if is_mouse_button_down(MouseButton::Left) {
@@ -174,67 +163,23 @@ async fn main() {
             for (rect, coord) in DROP_MAP {
                 if rect.contains(m) {
                     let mut to_coord = coord;
-                    match coord.location {
+                    to_coord.idx = match coord.location {
                         Location::Foundation(i) => {
-                            to_coord.idx =
-                                find_last_idx(game.state.foundation[i as usize].iter(), |c| {
-                                    c.is_some()
-                                })
+                            find_last_idx(game.state.foundation[i as usize].iter(), |c| c.is_some())
                                 .map(|i| i + 1)
-                                .unwrap_or(0) as u8;
+                                .unwrap_or(0) as u8
                         }
                         Location::Tableau(i) => {
-                            to_coord.idx =
-                                find_last_idx(game.state.tableau[i as usize].0.into_iter(), |c| {
-                                    c.is_some()
-                                })
-                                .map(|i| (i + 1) as u8)
-                                .unwrap_or(0) as u8;
+                            find_last_idx(game.state.tableau[i as usize].0.into_iter(), |c| {
+                                c.is_some()
+                            })
+                            .map(|i| i + 1)
+                            .unwrap_or(0) as u8
                         }
                         _ => unreachable!(),
-                    }
+                    };
                     let from_coord = game.state.get_coord(root).unwrap();
                     game.do_move(Action::Move(from_coord, to_coord));
-                    update_clickable_of_from(&game, &mut card_data, from_coord);
-
-                    for card in dragged_list.iter().flatten() {
-                        // make sure we get the right coord in case the move was invalid
-                        let actual_coord = game.state.get_coord(*card).unwrap();
-                        // update clickable_zone of card under us we actually moved
-                        if actual_coord == to_coord {
-                            match actual_coord.location {
-                                Location::Foundation(_) => {
-                                    // if there's a card under
-                                    if actual_coord.idx > 0 {
-                                        let mut under_coord = actual_coord;
-                                        under_coord.idx -= 1;
-                                        let under = game.state.get(under_coord).unwrap();
-                                        card_data.get_mut(&under).unwrap().clickable_zone = None;
-                                    }
-                                }
-                                Location::Tableau(_) => {
-                                    // if there's a card under
-                                    if actual_coord.idx > 0 {
-                                        let mut under_coord = actual_coord;
-                                        under_coord.idx -= 1;
-                                        let under = game.state.get(under_coord).unwrap();
-                                        // if there's a card directly under us, it must be face up
-                                        let d = card_data.get_mut(&under).unwrap();
-                                        // weird workaround to ensure the mutation occurs not on a
-                                        // copy
-                                        let mut z = d.clickable_zone.unwrap();
-                                        z.h = OVERLAP_OFFSET;
-                                        d.clickable_zone = Some(z);
-                                    }
-                                }
-                                // we can't move into the talon
-                                Location::Talon => unreachable!(),
-                            }
-                        }
-                        let d = card_data.get_mut(card).unwrap();
-                        d.clickable_zone = coord_to_clickable(&game, actual_coord);
-                        to_coord.idx += 1;
-                    }
                     break;
                 }
             }
@@ -245,6 +190,9 @@ async fn main() {
                 let d = card_data.get_mut(card).unwrap();
                 d.dragged_pos = None;
             }
+
+            // update the clickable zones for each card
+            update_all_clickable(&game, &mut card_data);
 
             dragged_root = None;
         }
@@ -787,124 +735,68 @@ fn find_cursor_hover(game: &Solitaire, card_data: &HashMap<Card, CardData>) -> O
     None
 }
 
-/// converts a coordinate to a card's clickable zone (if it has one)
-fn coord_to_clickable(game: &Solitaire, coord: Coord) -> Option<Rect> {
-    match coord.location {
-        Location::Foundation(p) => {
-            // only the top card has a clickable zone
-            let last = find_last_idx(game.state.foundation[p as usize].into_iter(), |c| {
-                c.is_some()
-            });
-            if Some(coord.idx as usize) == last {
-                Some(Rect {
-                    x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
-                    y: FOUNDATION_START.y,
-                    w: CARD_SIZE.x,
-                    h: CARD_SIZE.y,
-                })
-            } else {
-                None
-            }
-        }
-        Location::Tableau(p) => {
-            let first_face_up = game.state.tableau[p as usize].1;
-            let last = find_last_idx(game.state.tableau[p as usize].0.into_iter(), |c| {
-                c.is_some()
-            });
-            if let Some(last) = last {
-                let mut candidate = Rect {
-                    x: TABLEAU_START.x + HORIZONTAL_OFFSET * p as f32,
-                    y: TABLEAU_START.y + OVERLAP_OFFSET * coord.idx as f32,
-                    w: CARD_SIZE.x,
-                    h: 0.0,
-                };
-                if coord.idx < first_face_up {
-                    // face down
-                    None
-                } else if coord.idx as usize == last {
-                    // last card so full hitbox
-                    candidate.h = CARD_SIZE.y;
-                    Some(candidate)
-                } else {
-                    // otherwise we're a middle card which has partial hitbox
-                    candidate.h = OVERLAP_OFFSET;
-                    Some(candidate)
-                }
-            } else {
-                // no cards in this pile
-                None
-            }
-        }
-        Location::Talon => {
-            // if we're the visible card
-            if coord.idx as i8 == game.state.talon.1 {
-                let offset = match game.state.talon.1 {
-                    // will be all the way to the left so no offset
-                    -1 | 0 => 0.0,
-                    // will be one card to the right
-                    1 => OVERLAP_OFFSET,
+/// definitive clickable updater
+fn update_all_clickable(game: &Solitaire, card_data: &mut HashMap<Card, CardData>) {
+    update_clickable_of_talon(game, card_data);
 
-                    // will be two cards to the right
-                    _ => OVERLAP_OFFSET * 2.0,
-                };
-                Some(Rect {
-                    x: TALON_START.x + offset,
-                    y: TALON_START.y,
-                    w: CARD_SIZE.x,
-                    h: CARD_SIZE.y,
-                })
-            } else {
-                None
-            }
+    // update tableau
+    let mut current_zone = TABLEAU_START; // where each card is located
+    for column in game.state.tableau {
+        // face down cards (column.1 returns the first face up index so no +1)
+        for card in column.0.iter().take(column.1 as usize) {
+            // we know anything before column.1 must be a card
+            let d = card_data.get_mut(&card.unwrap()).unwrap();
+            d.clickable_zone = None;
+
+            current_zone.y += OVERLAP_OFFSET;
         }
+
+        // face up cards
+        let mut prev = None;
+        for card in column.0.iter().skip(column.1 as usize).flatten() {
+            prev = Some(card);
+            let z = Rect {
+                x: current_zone.x,
+                y: current_zone.y,
+                w: COVERED_CARD_SIZE.x,
+                h: COVERED_CARD_SIZE.y,
+            };
+            let d = card_data.get_mut(card).unwrap();
+            d.clickable_zone = Some(z);
+
+            current_zone.y += OVERLAP_OFFSET;
+        }
+
+        // update last card to have full clickable zone
+        if let Some(card) = prev {
+            let d = card_data.get_mut(card).unwrap();
+            let mut z = d.clickable_zone.unwrap();
+            z.h = CARD_SIZE.y;
+            d.clickable_zone = Some(z);
+        }
+
+        current_zone.x += HORIZONTAL_OFFSET;
+        current_zone.y = TABLEAU_START.y;
     }
-}
 
-fn update_clickable_of_from(
-    game: &Solitaire,
-    card_data: &mut HashMap<Card, CardData>,
-    from_coord: Coord,
-) {
-    match from_coord.location {
-        Location::Foundation(p) => {
-            // could potentially use from_coord.idx -1 for foundation, but I'm lazy
-            if let Some(last) =
-                find_last_idx(game.state.foundation[p as usize].iter(), |c| c.is_some())
-            {
-                let clickable_zone = Rect {
-                    x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
-                    y: FOUNDATION_START.y,
-                    w: CARD_SIZE.x,
-                    h: CARD_SIZE.y,
-                };
-                let card = game.state.foundation[p as usize][last].unwrap();
-                card_data.get_mut(&card).unwrap().clickable_zone = Some(clickable_zone);
-            }
+    // foundation
+    for (p, pile) in game.state.foundation.iter().enumerate() {
+        let mut j = None;
+        for (i, card) in pile.iter().flatten().enumerate() {
+            let d = card_data.get_mut(card).unwrap();
+            d.clickable_zone = None;
+            j = Some(i);
         }
-        Location::Tableau(p) => {
-            // the new card is guaranteed to be unveiled so no need of tableau[p].1
-            if let Some(last) =
-                find_last_idx(game.state.tableau[p as usize].0.iter(), |c| c.is_some())
-            {
-                if from_coord.idx == 0 {
-                    return;
-                }
-                let clickable_zone = Rect {
-                    x: TABLEAU_START.x + HORIZONTAL_OFFSET * p as f32,
-                    y: TABLEAU_START.y + OVERLAP_OFFSET * (from_coord.idx - 1) as f32,
-                    w: CARD_SIZE.x,
-                    // we know at most one card will become uncovered after a move:
-                    // either a card has been turned up, or a face up card has been
-                    // revealed. so we only have to update this card to have full
-                    // height clickable zone.
-                    h: CARD_SIZE.y,
-                };
-                let card = game.state.tableau[p as usize].0[last].unwrap();
-                card_data.get_mut(&card).unwrap().clickable_zone = Some(clickable_zone);
-            }
-        }
-        Location::Talon => {
-            update_clickable_of_talon(game, card_data);
+        if let Some(j) = j {
+            card_data
+                .get_mut(&game.state.foundation[p][j].unwrap())
+                .unwrap()
+                .clickable_zone = Some(Rect {
+                x: FOUNDATION_START.x + HORIZONTAL_OFFSET * p as f32,
+                y: FOUNDATION_START.y,
+                w: CARD_SIZE.x,
+                h: CARD_SIZE.y,
+            });
         }
     }
 }
@@ -921,6 +813,10 @@ fn update_clickable_of_talon(game: &Solitaire, card_data: &mut HashMap<Card, Car
         _ => OVERLAP_OFFSET * 2.0,
     };
     let talon = game.state.talon;
+    for card in talon.0[..talon.1 as usize].iter().flatten() {
+        let d = card_data.get_mut(card).unwrap();
+        d.clickable_zone = None;
+    }
     let card = talon.0[talon.1 as usize];
     if let Some(card) = card {
         let clickable_zone = Rect {
