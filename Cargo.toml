@@ -9,8 +9,8 @@ edition = "2021"
 members = ["crates/solitaire-game", "crates/solitaire-solver"]
 
 [dependencies]
-eframe = "0.33.2"
-egui = "0.33.2"
-egui_extras = { version = "0.33.2", features = ["all_loaders"] }
-epaint = "0.33.2"
+macroquad = "0.4.14"
 solitaire-game = { version = "0.1.0", path = "crates/solitaire-game" }
+
+[patch.crates-io]
+miniquad = { git = "https://github.com/beaconbrigade/miniquad", branch = "double-click-patch" }
