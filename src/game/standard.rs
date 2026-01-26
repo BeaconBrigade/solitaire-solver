@@ -30,6 +30,8 @@ pub struct StandardGame {
     dragged_root: Option<Card>,
     dragged_list: [Option<Card>; 13],
     card_data: HashMap<Card, CardData>,
+    // draw card relative to where the mouse clicked it
+    cursor_offset: Vec2,
 
     params: DrawTextureParams,
     card_textures: HashMap<Card, Texture2D>,
@@ -64,6 +66,7 @@ impl StandardGame {
             params,
             dragged_root: None,
             dragged_list: [None; 13],
+            cursor_offset: Vec2::ZERO,
             card_data,
         }
     }
@@ -139,6 +142,7 @@ impl StandardGame {
                     // update dragged_pos for each pulled card
                     let (x, y) = mouse_position();
                     let mut m = Vec2 { x, y };
+                    m += self.cursor_offset;
                     self.card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
                     for child in self.dragged_list[1..].iter().flatten() {
                         m.y += OVERLAP_OFFSET;
@@ -147,12 +151,14 @@ impl StandardGame {
                 }
                 None => {
                     // set up dragged_pos for each dragged card
-                    let r = find_cursor_hover(&self.game, &self.card_data);
+                    let (offset, r) = find_cursor_hover(&self.game, &self.card_data);
                     self.dragged_root = r;
+                    self.cursor_offset = offset;
                     let coord = r.and_then(|c| self.game.state.get_coord(c));
                     if let (Some(coord), Some(r)) = (coord, r) {
                         let (x, y) = mouse_position();
                         let mut m = Vec2 { x, y };
+                        m += self.cursor_offset;
                         self.card_data.get_mut(&r).unwrap().dragged_pos = Some(m);
                         // card_data.get_mut(&r).unwrap().clickable_zone = None;
                         match coord.location {
@@ -168,7 +174,6 @@ impl StandardGame {
                                 for child in pile.0[coord.idx as usize + 1..].iter().flatten() {
                                     m.y += OVERLAP_OFFSET;
                                     self.card_data.get_mut(child).unwrap().dragged_pos = Some(m);
-                                    // card_data.get_mut(child).unwrap().clickable_zone = None;
                                 }
                             }
                         }
@@ -179,8 +184,17 @@ impl StandardGame {
             // mouse is up, but we have a dragged root, so we should make a move
             let (x, y) = mouse_position();
             let m = Vec2 { x, y };
+            // top left
+            let point = m + self.cursor_offset;
+            // drop card from top left corner
+            let z = Rect {
+                x: point.x,
+                y: point.y,
+                w: CARD_SIZE.x,
+                h: CARD_SIZE.y,
+            };
             for (rect, coord) in DROP_MAP {
-                if rect.contains(m) {
+                if rect.overlaps(&z) {
                     let mut to_coord = coord;
                     to_coord.idx = match coord.location {
                         Location::Foundation(i) => {
@@ -707,14 +721,19 @@ fn clear_list(dragged_list: &mut [Option<Card>; 13]) {
     }
 }
 
-fn find_cursor_hover(game: &Solitaire, card_data: &HashMap<Card, CardData>) -> Option<Card> {
+fn find_cursor_hover(
+    game: &Solitaire,
+    card_data: &HashMap<Card, CardData>,
+) -> (Vec2, Option<Card>) {
     let state = game.state;
     // search talon
     for c in state.talon.0.iter().flatten() {
         let (x, y) = mouse_position();
         let m = Vec2 { x, y };
-        if card_data[c].clickable_zone.is_some_and(|z| z.contains(m)) {
-            return Some(*c);
+        if let Some(z) = card_data[c].clickable_zone {
+            if z.contains(m) {
+                return (z.point() - m, Some(*c));
+            }
         }
     }
     // search foundation
@@ -722,8 +741,10 @@ fn find_cursor_hover(game: &Solitaire, card_data: &HashMap<Card, CardData>) -> O
         for c in pile.iter().flatten() {
             let (x, y) = mouse_position();
             let m = Vec2 { x, y };
-            if card_data[c].clickable_zone.is_some_and(|z| z.contains(m)) {
-                return Some(*c);
+            if let Some(z) = card_data[c].clickable_zone {
+                if z.contains(m) {
+                    return (z.point() - m, Some(*c));
+                }
             }
         }
     }
@@ -732,13 +753,15 @@ fn find_cursor_hover(game: &Solitaire, card_data: &HashMap<Card, CardData>) -> O
         for c in pile.0.iter().flatten() {
             let (x, y) = mouse_position();
             let m = Vec2 { x, y };
-            if card_data[c].clickable_zone.is_some_and(|z| z.contains(m)) {
-                return Some(*c);
+            if let Some(z) = card_data[c].clickable_zone {
+                if z.contains(m) {
+                    return (z.point() - m, Some(*c));
+                }
             }
         }
     }
 
-    None
+    (Vec2::ZERO, None)
 }
 
 /// definitive clickable updater
