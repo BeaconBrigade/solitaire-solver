@@ -1,7 +1,13 @@
 mod game;
 mod image;
 
-use std::{cell::RefCell, fs::{self, File}, io::Read, rc::Rc, str::FromStr};
+use std::{
+    cell::RefCell,
+    fs::{self, File},
+    io::Read,
+    rc::Rc,
+    str::FromStr,
+};
 
 use futures::executor;
 use macroquad::{
@@ -46,7 +52,32 @@ async fn main() {
         match &mut mode {
             Mode::Menu => {
                 if is_key_pressed(KeyCode::Escape) {
-                    // mode = Mode::Standard;
+                    let already = already_playing.borrow_mut();
+                    if matches!(*already, Mode::Standard(_, _)) {
+                        // load bearing drop
+                        drop(already);
+                        next_mode = Some(already_playing.replace(Mode::Menu));
+                    } else if selected_source == 0 {
+                        let deck = Deck::new_shuffled();
+                        // oh yeah, async baby
+                        next_mode = Some(Mode::Standard(
+                            Box::new(executor::block_on(StandardGame::new(deck))),
+                            deck,
+                        ));
+                    } else {
+                        // find a file
+                        match read_deck(&deck_path) {
+                            Ok(d) => {
+                                next_mode = Some(Mode::Standard(
+                                    Box::new(executor::block_on(StandardGame::new(d))),
+                                    d,
+                                ));
+                            }
+                            Err(e) => {
+                                error_message = Some(e);
+                            }
+                        }
+                    }
                 }
                 if error_message.is_some() {
                     root_ui().window(hash!(), WINDOW_START, WINDOW_SIZE, |ui| {
@@ -83,16 +114,18 @@ async fn main() {
                                 } else if selected_source == 0 {
                                     let deck = Deck::new_shuffled();
                                     // oh yeah, async baby
-                                    next_mode = Some(Mode::Standard(Box::new(executor::block_on(
-                                        StandardGame::new(deck),
-                                    )), deck));
+                                    next_mode = Some(Mode::Standard(
+                                        Box::new(executor::block_on(StandardGame::new(deck))),
+                                        deck,
+                                    ));
                                 } else {
                                     // find a file
                                     match read_deck(&deck_path) {
                                         Ok(d) => {
-                                            next_mode = Some(Mode::Standard(Box::new(
-                                                executor::block_on(StandardGame::new(d)),
-                                            ), d));
+                                            next_mode = Some(Mode::Standard(
+                                                Box::new(executor::block_on(StandardGame::new(d))),
+                                                d,
+                                            ));
                                         }
                                         Err(e) => {
                                             error_message = Some(e);

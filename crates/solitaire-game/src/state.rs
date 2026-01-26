@@ -207,23 +207,21 @@ impl State {
                             }
                         }
                     }
-                    Location::Tableau(_) => {
-                        match placement_item {
-                            Some(up) => {
-                                if up.has_same_colour(&from_item) {
-                                    return false;
-                                }
-                                if up.value as u8 != from_item.value as u8 + 1 {
-                                    return false;
-                                }
+                    Location::Tableau(_) => match placement_item {
+                        Some(up) => {
+                            if up.has_same_colour(&from_item) {
+                                return false;
                             }
-                            None => {
-                                if from_item.value != Value::King {
-                                    return false;
-                                }
+                            if up.value as u8 != from_item.value as u8 + 1 {
+                                return false;
                             }
                         }
-                    }
+                        None => {
+                            if from_item.value != Value::King {
+                                return false;
+                            }
+                        }
+                    },
                     Location::Talon => unreachable!(),
                 }
                 if let Location::Tableau(i) = from.location {
@@ -304,7 +302,9 @@ impl State {
     }
 }
 
-pub(crate) fn iter_to_arr<const N: usize, T: Copy>(iter: &mut impl Iterator<Item = T>) -> [Option<T>; N] {
+pub(crate) fn iter_to_arr<const N: usize, T: Copy>(
+    iter: &mut impl Iterator<Item = T>,
+) -> [Option<T>; N] {
     let mut a = [None; N];
     a.iter_mut()
         .take(N)
