@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 use macroquad::prelude::*;
 
+use macroquad::ui::root_ui;
 use solitaire_game::action::Action;
 use solitaire_game::action::Coord;
 use solitaire_game::action::Location;
@@ -24,7 +25,7 @@ use crate::{
 };
 
 pub struct StandardGame {
-    game: Solitaire,
+    pub game: Solitaire,
 
     dragged_root: Option<Card>,
     dragged_list: [Option<Card>; 13],
@@ -67,10 +68,20 @@ impl StandardGame {
         }
     }
 
-    pub fn draw_frame(&mut self) {
-        let background_colour = color_u8!(5, 133, 3, 255);
-        clear_background(background_colour);
-
+    pub fn draw_frame_and_keep_playing(&mut self) -> bool {
+        if is_key_pressed(KeyCode::Escape) {
+            return false;
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 40.0,
+                y: 10.0,
+            },
+            "Menu",
+        ) {
+            return false;
+        }
+        //
         // We'll need to store what is being dragged and the position of everything which isn't
         // dragged. Drop zones will need to be known (and bigger than the clickable areas of each
         // card). Each card needs an associated click zone, and whether it is being dragged (for
@@ -431,6 +442,8 @@ impl StandardGame {
                 self.params.clone(),
             );
         }
+
+        true
     }
 }
 
