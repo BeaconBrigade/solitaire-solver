@@ -1,7 +1,7 @@
 use std::cmp;
 
 use crate::{
-    common::{Coord, Location, combine, find_last_idx, iter_to_arr},
+    common::{combine, find_last_idx, iter_to_arr, Coord, Location},
     deck::{Card, Deck, Value},
     kplus::action::Action,
 };
@@ -133,7 +133,7 @@ impl State {
         match pos.location {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize],
             Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize],
-            Location::Talon => self.talon.0[pos.idx as usize],
+            Location::Talon => self.talon.0.iter().flatten().nth(pos.idx as usize).copied(),
         }
     }
 
@@ -238,6 +238,51 @@ impl State {
         }
 
         true
+    }
+
+    pub fn set(mut self, pos: Coord, val: Option<Card>) -> Self {
+        match pos.location {
+            Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize] = val,
+            Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize] = val,
+            Location::Talon => self.talon.0[pos.idx as usize] = val,
+        };
+        self
+    }
+
+    pub fn get_coord(&self, card: Card) -> Option<Coord> {
+        // search talon
+        for (i, c) in self.talon.0.iter().flatten().enumerate() {
+            if *c == card {
+                return Some(Coord {
+                    location: Location::Talon,
+                    idx: i as u8,
+                });
+            }
+        }
+        // search foundation
+        for (p, pile) in self.foundation.iter().enumerate() {
+            for (i, c) in pile.iter().flatten().enumerate() {
+                if *c == card {
+                    return Some(Coord {
+                        location: Location::Foundation(p as u8),
+                        idx: i as u8,
+                    });
+                }
+            }
+        }
+        // search tableau
+        for (p, pile) in self.tableau.iter().enumerate() {
+            for (i, c) in pile.0.iter().flatten().enumerate() {
+                if *c == card {
+                    return Some(Coord {
+                        location: Location::Tableau(p as u8),
+                        idx: i as u8,
+                    });
+                }
+            }
+        }
+
+        None
     }
 }
 
