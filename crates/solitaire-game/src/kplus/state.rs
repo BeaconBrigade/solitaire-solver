@@ -1,8 +1,8 @@
 use std::cmp;
 
 use crate::{
-    common::{combine, find_last_idx, iter_to_arr, Coord, Location},
-    deck::{Card, Deck},
+    common::{Coord, Location, combine, find_last_idx, iter_to_arr},
+    deck::{Card, Deck, Value},
     kplus::action::Action,
 };
 
@@ -150,7 +150,94 @@ impl State {
         // this is going to have to be more rigorous than standard
         // as it is becoming clear that the move verification allowed
         // illegal moves on standard which makes move generation kinda difficult.
-        todo!()
+        // do nothing
+        let from = action.from;
+        let to = action.to;
+        if from == to {
+            return false;
+        }
+        // card can't move to the talon
+        if to.location == Location::Talon {
+            return false;
+        }
+        // can't move within the same column in both the talon or the tableau
+        if from.location == to.location {
+            return false;
+        }
+
+        // make sure from card exists but the to location doesn't
+        let Some(from_item) = self.get(from) else {
+            return false;
+        };
+        let None = self.get(to) else {
+            return false;
+        };
+        // make sure we can reach talon card
+        if from.location == Location::Talon && !self.is_reachable_talon(from.idx) {
+            return false;
+        }
+        // get the card from will have to move to
+        let placement_item = if to.idx > 0 {
+            let above = Coord::new(to.location, to.idx - 1);
+            self.get(above)
+        } else {
+            None
+        };
+
+        // ensure move is valid
+        match to.location {
+            Location::Foundation(_) => {
+                // ensure we aren't moving multiple cards to the foundation
+                if let Location::Tableau(from_col) = from.location {
+                    let last_idx =
+                        find_last_idx(self.tableau[from_col as usize].0.into_iter(), |c| {
+                            c.is_some()
+                        })
+                        .unwrap();
+                    if from.idx < last_idx as u8 {
+                        return false;
+                    }
+                }
+                match placement_item {
+                    Some(up) => {
+                        if up.suit != from_item.suit {
+                            return false;
+                        }
+                        if up.value as u8 != from_item.value as u8 - 1 {
+                            return false;
+                        }
+                    }
+                    None => {
+                        if from_item.value != Value::Ace {
+                            return false;
+                        }
+                    }
+                }
+            }
+            Location::Tableau(_) => match placement_item {
+                Some(up) => {
+                    if up.has_same_colour(&from_item) {
+                        return false;
+                    }
+                    if up.value as u8 != from_item.value as u8 + 1 {
+                        return false;
+                    }
+                }
+                None => {
+                    if from_item.value != Value::King {
+                        return false;
+                    }
+                }
+            },
+            Location::Talon => unreachable!(),
+        }
+        if let Location::Tableau(i) = from.location {
+            if self.tableau[i as usize].1 > from.idx {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
