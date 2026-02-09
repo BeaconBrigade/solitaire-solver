@@ -1,5 +1,1 @@
-
-
-pub struct KPlus {
-
-}
+pub struct KPlus {}

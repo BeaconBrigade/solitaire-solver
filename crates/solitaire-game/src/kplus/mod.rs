@@ -1,7 +1,11 @@
-use crate::{common::iter_to_arr, deck::Deck, kplus::{action::Action, state::State}};
+use crate::{
+    common::iter_to_arr,
+    deck::Deck,
+    kplus::{action::Action, state::State},
+};
 
-pub mod state;
 pub mod action;
+pub mod state;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct KPlusSolitaire {
@@ -32,7 +36,7 @@ impl KPlusSolitaire {
                     iter_to_arr(&mut iter),
                     iter_to_arr(&mut iter),
                 ],
-                talon: ([None; 24], 0, 1),
+                talon: ([None; 24], -1, 1, 0),
             },
         };
         game.state.talon.0[0] = Some(last);

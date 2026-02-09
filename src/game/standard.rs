@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use macroquad::prelude::*;
 
 use macroquad::ui::root_ui;
-use solitaire_game::standard::action::Action;
-use solitaire_game::common::{Coord, Location};
 use solitaire_game::common::find_last_idx;
+use solitaire_game::common::{Coord, Location};
+use solitaire_game::standard::action::Action;
 use solitaire_game::{
     deck::{Card, Deck},
     standard::Solitaire,

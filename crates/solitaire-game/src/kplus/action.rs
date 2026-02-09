@@ -11,4 +11,3 @@ impl Action {
         Self { from, to }
     }
 }
-

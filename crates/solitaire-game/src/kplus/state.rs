@@ -150,6 +150,9 @@ impl State {
     }
 
     pub fn is_valid_move(&self, action: Action) -> bool {
+        // this is going to have to be more rigorous than standard
+        // as it is becoming clear that the move verification allowed
+        // illegal moves on standard which makes move generation kinda difficult.
         todo!()
     }
 }
