@@ -82,15 +82,18 @@ impl State {
                 // left however many times are required.
 
                 new.talon.0[action.from.idx as usize] = None;
-                new.talon.3 += 1;
 
                 if self.talon.1 != action.from.idx as i8 {
-                    new.talon.0[action.from.idx as usize..].rotate_left(new.talon.3 as usize);
+                    // rotate from the old special index to remove blanks
+                    new.talon.0[new.talon.1 as usize + 1..].rotate_left(new.talon.3 as usize);
                     new.talon.3 = 0;
                 }
+                new.talon.3 += 1;
+
                 // can be negative if there's no special index
                 new.talon.1 = action.from.idx as i8 - 1;
 
+                // one less card in the talon
                 new.talon.2 -= 1;
             }
         }
@@ -138,15 +141,9 @@ impl State {
     pub fn is_reachable_talon(&self, idx: u8) -> bool {
         // every third card is available. also, the last card will be available
         // finally the card at the special index is available.
-        if (idx + 1) % 3 == 0 {
-            true
-        } else if idx == self.talon.2 + self.talon.3 {
-            true
-        } else if idx as i8 == self.talon.1 {
-            true
-        } else {
-            false
-        }
+        (idx + 1).is_multiple_of(3)
+            || idx == self.talon.2 + self.talon.3
+            || idx as i8 == self.talon.1
     }
 
     pub fn is_valid_move(&self, action: Action) -> bool {
