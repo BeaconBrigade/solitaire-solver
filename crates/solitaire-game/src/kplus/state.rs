@@ -80,18 +80,23 @@ impl State {
                 // the card below the moving one has to become the special index.
                 // if the card moved was not the special index, we should rotate
                 // left however many times are required.
-
                 new.talon.0[action.from.idx as usize] = None;
 
-                if self.talon.1 != action.from.idx as i8 {
+                let mut shifted = 0;
+                if self.talon.1 >= 0 && self.talon.1 != action.from.idx as i8 {
+                    // if the special index is after where we shift, we need to
+                    // adjust the special index to account for the shift
+                    if action.from.idx > self.talon.1 as u8 {
+                        shifted = new.talon.3;
+                    }
                     // rotate from the old special index to remove blanks
-                    new.talon.0[new.talon.1 as usize + 1..].rotate_left(new.talon.3 as usize);
+                    new.talon.0[new.talon.1.max(0) as usize + 1..].rotate_left(new.talon.3 as usize);
                     new.talon.3 = 0;
                 }
                 new.talon.3 += 1;
 
                 // can be negative if there's no special index
-                new.talon.1 = action.from.idx as i8 - 1;
+                new.talon.1 = action.from.idx as i8 - 1 - shifted as i8;
 
                 // one less card in the talon
                 new.talon.2 -= 1;
@@ -133,17 +138,28 @@ impl State {
         match pos.location {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize],
             Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize],
-            Location::Talon => self.talon.0.iter().flatten().nth(pos.idx as usize).copied(),
+            // do flatten last so we actually count blank spaces in the talon
+            Location::Talon => self.talon.0.iter().nth(pos.idx as usize).copied().flatten(),
         }
     }
 
     /// returns whether a card is reachable in the talon
     pub fn is_reachable_talon(&self, idx: u8) -> bool {
-        // every third card is available. also, the last card will be available
-        // finally the card at the special index is available.
+        // if after the special then you're available if
+        // - multiple of three after special + shift
+        // - multiple of three on the flattened list
+        // - or last in the talon
+        if self.talon.1 >= 0 && idx as i8 > self.talon.1 {
+            // in brackets is the offset from special + offset
+            return (idx - self.talon.1 as u8 - self.talon.3).is_multiple_of(3)
+                || (idx + self.talon.3 - 1).is_multiple_of(3)
+                || idx == self.talon.2 + self.talon.3 - 1;
+        }
+        // every third card is available, the last card
+        // will be available and the card at the special index is available
         (idx + 1).is_multiple_of(3)
-            || idx == self.talon.2 + self.talon.3
             || idx as i8 == self.talon.1
+            || idx == self.talon.2 + self.talon.3 - 1
     }
 
     pub fn is_valid_move(&self, action: Action) -> bool {
@@ -251,8 +267,8 @@ impl State {
 
     pub fn get_coord(&self, card: Card) -> Option<Coord> {
         // search talon
-        for (i, c) in self.talon.0.iter().flatten().enumerate() {
-            if *c == card {
+        for (i, c) in self.talon.0.iter().enumerate() {
+            if *c == Some(card) {
                 return Some(Coord {
                     location: Location::Talon,
                     idx: i as u8,

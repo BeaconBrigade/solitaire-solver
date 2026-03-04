@@ -1,9 +1,14 @@
 //! This is just normal solitaire with the face down cards
 
+use crate::clear_list;
+use crate::push_first;
 use crate::COVERED_CARD_SIZE;
+use crate::DROP_MAP;
+use crate::FOUNDATION_START;
 use crate::HORIZONTAL_OFFSET;
 use crate::OVERLAP_OFFSET;
 use crate::SCREEN_WIDTH;
+use crate::TABLEAU_START;
 use crate::TOP_OFFSET;
 use std::collections::HashMap;
 
@@ -11,7 +16,7 @@ use macroquad::prelude::*;
 
 use macroquad::ui::root_ui;
 use solitaire_game::common::find_last_idx;
-use solitaire_game::common::{Coord, Location};
+use solitaire_game::common::Location;
 use solitaire_game::standard::action::Action;
 use solitaire_game::{
     deck::{Card, Deck},
@@ -543,14 +548,6 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
     map
 }
 
-const FOUNDATION_START: Vec2 = Vec2 {
-    x: CARD_SIZE.x,
-    y: TOP_OFFSET,
-};
-const TABLEAU_START: Vec2 = Vec2 {
-    x: CARD_SIZE.x,
-    y: CARD_SIZE.y * 2.5,
-};
 // two card lengths from the right
 const STOCK_START: Vec2 = Vec2 {
     x: SCREEN_WIDTH as f32 - CARD_SIZE.x * 2.0,
@@ -561,164 +558,12 @@ const TALON_START: Vec2 = Vec2 {
     y: TOP_OFFSET,
 };
 
-const DROP_MAP: [(Rect, Coord); 11] = [
-    // foundations
-    (
-        Rect {
-            x: FOUNDATION_START.x,
-            y: FOUNDATION_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y,
-        },
-        Coord {
-            location: Location::Foundation(0),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: FOUNDATION_START.x + HORIZONTAL_OFFSET,
-            y: FOUNDATION_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y,
-        },
-        Coord {
-            location: Location::Foundation(1),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * 2.0,
-            y: FOUNDATION_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y,
-        },
-        Coord {
-            location: Location::Foundation(2),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * 3.0,
-            y: FOUNDATION_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y,
-        },
-        Coord {
-            location: Location::Foundation(3),
-            idx: 0,
-        },
-    ),
-    // tableau
-    (
-        Rect {
-            x: TABLEAU_START.x,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(0),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: TABLEAU_START.x + HORIZONTAL_OFFSET,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(1),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 2.0,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(2),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 3.0,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(3),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 4.0,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(4),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 5.0,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(5),
-            idx: 0,
-        },
-    ),
-    (
-        Rect {
-            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 6.0,
-            y: TABLEAU_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
-        },
-        Coord {
-            location: Location::Tableau(6),
-            idx: 0,
-        },
-    ),
-];
-
 const TALON_BUTTON: Rect = Rect {
     x: STOCK_START.x,
     y: STOCK_START.y,
     w: CARD_SIZE.x,
     h: CARD_SIZE.y,
 };
-
-fn push_first(arr: &mut [Option<Card>; 13], item: Card) {
-    for (i, c) in arr.iter().enumerate() {
-        if c.is_none() {
-            arr[i] = Some(item);
-            return;
-        }
-    }
-}
-
-fn clear_list(dragged_list: &mut [Option<Card>; 13]) {
-    for c in dragged_list.iter_mut() {
-        *c = None;
-    }
-}
 
 fn find_cursor_hover(
     game: &Solitaire,
