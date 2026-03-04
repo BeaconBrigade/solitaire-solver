@@ -90,7 +90,8 @@ impl State {
                         shifted = new.talon.3;
                     }
                     // rotate from the old special index to remove blanks
-                    new.talon.0[new.talon.1.max(0) as usize + 1..].rotate_left(new.talon.3 as usize);
+                    new.talon.0[new.talon.1.max(0) as usize + 1..]
+                        .rotate_left(new.talon.3 as usize);
                     new.talon.3 = 0;
                 }
                 new.talon.3 += 1;

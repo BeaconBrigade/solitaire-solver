@@ -6,7 +6,7 @@ use crate::{
     standard::action::Action,
 };
 
-/// Representation of Solitaire *not* using [K+ solitaire](https://web.engr.oregonstate.edu/~afern/papers/solitaire.pdf)
+/// Representation of Solitaire
 #[derive(Debug, Clone, Copy)]
 pub struct State {
     /// There are seven slots in the tableau. A specific slot
