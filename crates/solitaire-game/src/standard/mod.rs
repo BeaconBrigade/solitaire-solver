@@ -8,7 +8,7 @@ use crate::{common::iter_to_arr, deck::Deck};
 use action::Action;
 use state::State;
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Solitaire {
     pub state: State,
 }

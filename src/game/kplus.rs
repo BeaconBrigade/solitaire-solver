@@ -27,6 +27,8 @@ pub struct KPlusGame {
     params: DrawTextureParams,
     card_textures: HashMap<Card, Texture2D>,
     blank_texture: Texture2D,
+
+    positions: Vec<KPlusSolitaire>,
 }
 
 impl KPlusGame {
@@ -54,6 +56,7 @@ impl KPlusGame {
             dragged_list: [None; 13],
             cursor_offset: Vec2::ZERO,
             card_data,
+            positions: Vec::from([game]),
         }
     }
 
@@ -69,6 +72,32 @@ impl KPlusGame {
             "Menu",
         ) {
             return false;
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 100.0,
+                y: 10.0,
+            },
+            "Undo",
+        ) {
+            if let Some(game) = self.positions.pop() {
+                self.game = game;
+            }
+            update_all_clickable(&self.game, &mut self.card_data);
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 200.0,
+                y: 10.0,
+            },
+            "Restart",
+        ) {
+            if let Some(game) = self.positions.first().copied() {
+                self.game = game;
+                self.positions.clear();
+                self.positions.push(game);
+                self.card_data = initialize_card_data(&self.game);
+            }
         }
 
         // update stuff:
@@ -152,7 +181,11 @@ impl KPlusGame {
                         _ => unreachable!(),
                     };
                     let from_coord = self.game.state.get_coord(root).unwrap();
+                    let prev = self.game;
                     self.game.do_move(Action::new(from_coord, to_coord));
+                    if self.game != prev {
+                        self.positions.push(prev);
+                    }
                     break;
                 }
             }

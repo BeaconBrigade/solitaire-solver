@@ -7,7 +7,7 @@ use crate::{
 };
 
 /// Representation of Solitaire
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
     /// There are seven slots in the tableau. A specific slot
     /// can hold up to 19 cards because on the far right slot
