@@ -208,4 +208,71 @@ mod tests {
 
         assert_eq!(set, required);
     }
+
+    #[test]
+    fn one() {
+        let d = Deck::from_str(
+            "Spades Three\nDiamonds Ace\nClubs Five\nSpades Jack\nClubs Jack\nClubs Three\nHearts Nine\nHearts Three\nDiamonds Nine\nSpades Four\nClubs Seven\nClubs Eight\nSpades King\nSpades Eight\nHearts Eight\nHearts Queen\nHearts Six\nSpades Queen\nSpades Ace\nSpades Five\nSpades Nine\nDiamonds Two\nHearts Ten\nClubs Two\nClubs King\nHearts King\nClubs Ten\nHearts Five\nDiamonds Five\nDiamonds Seven\nSpades Ten\nHearts Ace\nDiamonds King\nHearts Seven\nClubs Nine\nDiamonds Three\nClubs Queen\nDiamonds Ten\nDiamonds Eight\nSpades Six\nDiamonds Six\nSpades Seven\nClubs Six\nDiamonds Jack\nDiamonds Queen\nHearts Four\nClubs Four\nDiamonds Four\nClubs Ace\nHearts Two\nHearts Jack\nSpades Two\n"
+        ).unwrap();
+        let game = KPlusSolitaire::with_deck(d);
+        let moves = generate_moves(&game);
+        let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
+        let required = [
+            a!(ta!(17), tb!(1, 2)),
+            a!(ta!(20), fd!(0, 0)),
+            a!(tb!(3, 3), tb!(6, 7)),
+            a!(tb!(4, 4), tb!(5, 6)),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(set, required);
+    }
+
+    #[test]
+    fn two() {
+        let d = Deck::from_str(
+            "Clubs Ten\nSpades Six\nSpades Jack\nSpades Seven\nDiamonds Three\nDiamonds Two\nDiamonds Four\nDiamonds Six\nHearts Two\nHearts Six\nDiamonds Queen\nDiamonds Ten\nClubs Queen\nSpades Queen\nSpades Ace\nSpades King\nSpades Two\nHearts Five\nClubs Two\nSpades Five\nHearts Ten\nHearts Seven\nSpades Three\nSpades Ten\nClubs Three\nClubs Jack\nClubs Four\nHearts Four\nClubs Five\nClubs King\nDiamonds Nine\nDiamonds Seven\nHearts Nine\nClubs Nine\nHearts Eight\nHearts Queen\nHearts Ace\nDiamonds Jack\nClubs Six\nHearts Jack\nHearts King\nClubs Seven\nSpades Eight\nHearts Three\nSpades Four\nDiamonds Ace\nDiamonds Five\nSpades Nine\nDiamonds Eight\nClubs Ace\nDiamonds King\nClubs Eight\n"
+        ).unwrap();
+
+        let game = KPlusSolitaire::with_deck(d);
+        let moves = generate_moves(&game);
+        let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
+        let required = [
+            a!(ta!(2), tb!(0, 1)),
+            a!(ta!(5), tb!(5, 6)),
+            a!(ta!(8), fd!(0, 0)),
+            a!(ta!(17), fd!(0, 0)),
+            a!(tb!(4, 4), fd!(0, 0)),
+            a!(tb!(5, 5), tb!(1, 2)),
+            // this is silly
+            a!(tb!(4, 4), tb!(2, 3)),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(set, required);
+    }
+
+    #[test]
+    fn five() {
+        let d = Deck::from_str(
+            "Hearts Six\nHearts Three\nDiamonds Four\nDiamonds Six\nHearts Five\nHearts Queen\nSpades Four\nClubs Eight\nSpades Ten\nClubs Nine\nDiamonds Two\nSpades Ace\nSpades Queen\nClubs Queen\nSpades Six\nSpades Seven\nClubs Three\nHearts Eight\nDiamonds Three\nDiamonds Ace\nDiamonds Eight\nHearts Seven\nDiamonds Jack\nHearts King\nDiamonds King\nClubs Ten\nHearts Two\nDiamonds Seven\nClubs Ace\nClubs Four\nSpades Eight\nHearts Four\nHearts Ten\nDiamonds Ten\nSpades Three\nDiamonds Nine\nSpades Two\nClubs Six\nClubs Two\nDiamonds Five\nClubs Five\nSpades Five\nClubs King\nDiamonds Queen\nClubs Seven\nHearts Nine\nClubs Jack\nSpades King\nSpades Jack\nSpades Nine\nHearts Jack\nHearts Ace\n"
+        ).unwrap();
+
+        let game = KPlusSolitaire::with_deck(d);
+        let moves = generate_moves(&game);
+        let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
+        let required = [
+            a!(ta!(11), tb!(4, 5)),
+            a!(ta!(20), tb!(2, 3)),
+            a!(ta!(23), fd!(0, 0)),
+            a!(tb!(4, 4), tb!(6, 7)),
+            a!(tb!(5, 5), tb!(3, 4)),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(set, required);
+    }
 }
