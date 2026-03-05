@@ -1,3 +1,7 @@
 //! # solitaire-solver
 //!
-//! Library for solving solitaire puzzles
+//! Library for solving Thoughtful Solitaire
+//!
+//!
+
+pub mod move_generation;

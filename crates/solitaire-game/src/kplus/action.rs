@@ -1,6 +1,6 @@
 use crate::common::Coord;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Action {
     pub from: Coord,
     pub to: Coord,

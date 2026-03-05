@@ -1,6 +1,6 @@
 //! common functions to help working with states
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Coord {
     pub location: Location,
     pub idx: u8,
@@ -12,7 +12,7 @@ impl Coord {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Location {
     /// Contains which foundation stack this coord is in
     Foundation(u8),
