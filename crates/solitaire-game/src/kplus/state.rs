@@ -147,13 +147,13 @@ impl State {
     /// returns whether a card is reachable in the talon
     pub fn is_reachable_talon(&self, idx: u8) -> bool {
         // if after the special then you're available if
-        // - multiple of three after special + shift
-        // - multiple of three on the flattened list
+        // - multiple of three starting from after special (ignoring blanks)
+        // - multiple of three on the flattened list (equivalent to turning stock
+        //   all the way around)
         // - or last in the talon
         if self.talon.1 >= 0 && idx as i8 > self.talon.1 {
-            // in brackets is the offset from special + offset
             return (idx - self.talon.1 as u8 - self.talon.3).is_multiple_of(3)
-                || (idx + self.talon.3 - 1).is_multiple_of(3)
+                || (idx - self.talon.3 + 1).is_multiple_of(3)
                 || idx == self.talon.2 + self.talon.3 - 1;
         }
         // every third card is available, the last card
