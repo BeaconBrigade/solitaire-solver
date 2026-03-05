@@ -1,57 +1,40 @@
-//! This is just normal solitaire with the face down cards
-
-use crate::clear_list;
-use crate::push_first;
-use crate::COVERED_CARD_SIZE;
-use crate::DROP_MAP;
-use crate::FOUNDATION_START;
-use crate::HORIZONTAL_OFFSET;
-use crate::OVERLAP_OFFSET;
-use crate::SCREEN_WIDTH;
-use crate::TABLEAU_START;
-use crate::TOP_OFFSET;
-use std::collections::HashMap;
-
 use macroquad::prelude::*;
-
 use macroquad::ui::root_ui;
-use solitaire_game::common::find_last_idx;
-use solitaire_game::common::Location;
-use solitaire_game::standard::action::Action;
+
+use std::{cmp::min, collections::HashMap};
+
 use solitaire_game::{
+    common::{find_last_idx, Location},
     deck::{Card, Deck},
-    standard::Solitaire,
+    kplus::{action::Action, KPlusSolitaire},
 };
 
 use crate::{
+    clear_list,
     image::{self, initialize_card_textures},
-    CARD_SIZE,
+    push_first, CARD_SIZE, COVERED_CARD_SIZE, DROP_MAP, FOUNDATION_START, HORIZONTAL_OFFSET,
+    OVERLAP_OFFSET, SCREEN_WIDTH, TABLEAU_START,
 };
 
-pub struct StandardGame {
-    pub game: Solitaire,
+pub struct KPlusGame {
+    pub game: KPlusSolitaire,
 
     dragged_root: Option<Card>,
     dragged_list: [Option<Card>; 13],
     card_data: HashMap<Card, CardData>,
-    // draw card relative to where the mouse clicked it
     cursor_offset: Vec2,
 
     params: DrawTextureParams,
     card_textures: HashMap<Card, Texture2D>,
     blank_texture: Texture2D,
-    back_texture: Texture2D,
 }
 
-impl StandardGame {
+impl KPlusGame {
     pub async fn new(deck: Deck) -> Self {
         let card_textures = initialize_card_textures().await;
         let blank_texture = load_texture(image::BLANK)
             .await
             .expect("couldn't find blank texture");
-        let back_texture = load_texture(image::BACK)
-            .await
-            .expect("couldn't find back texture");
 
         // scaler for card size (convenience for resizing cards and maintaining ratio)
         let params = DrawTextureParams {
@@ -59,14 +42,13 @@ impl StandardGame {
             ..Default::default()
         };
 
-        let game = Solitaire::with_deck(deck);
+        let game = KPlusSolitaire::with_deck(deck);
         let card_data = initialize_card_data(&game);
 
         Self {
             game,
             card_textures,
             blank_texture,
-            back_texture,
             params,
             dragged_root: None,
             dragged_list: [None; 13],
@@ -88,59 +70,11 @@ impl StandardGame {
         ) {
             return false;
         }
-        //
-        // We'll need to store what is being dragged and the position of everything which isn't
-        // dragged. Drop zones will need to be known (and bigger than the clickable areas of each
-        // card). Each card needs an associated click zone, and whether it is being dragged (for
-        // tableau stack dragging). Need a function for clickable zones when overlapped.
-        //
-        // Additional data for each card
-        //   - is being dragged
-        //   - clickable zone (optional value)
-        //   - (?) is face up (could be convenient to have but we can already find this using Deck)
-        //
-        // handle user input (we'll have to keep track of what is being dragged)
-        //   - turn stocks
-        //   - drag cards
-        //     - from talon
-        //     - from tableau
-        //     - from foundation (which has stacks)
-        //   - drop cards
-        //
-        // drawing
-        //   - talon: draw top three cards (if there are any) and upside down card (if any)
-        //   - tableau: draw either blank or top card of tableau
-        //   - foundation: draw blanks or face down cards and upside cards for each column
-        //   - draw dragged cards last so they're on top
-        //      - use fixed size list with length 13 of Option<Card>
-        //
 
-        // handling user input
-        //   if mouse down
-        //     if drag_root is None
-        //         find drag_root using clickable_zone
-        //     set dragged_root's dragged_zone to cursor location
-        //     set each child of dragged_root's dragged_zone relative to dragged_root
-        //   else if mouse up but dragged card
-        //     perform move action
-        //     for each card in dragged_list
-        //         set dragged_zone to None
-        //         update clickable_zone
-        //     set dragged_root to None
-        //   clear dragged_list
-        //
-
-        // handle user input
-        let (x, y) = mouse_position();
-        let m = Vec2 { x, y };
-        // check for talon button clicks
-        if self.dragged_root.is_none()
-            && is_mouse_button_pressed(MouseButton::Left)
-            && TALON_BUTTON.contains(m)
-        {
-            self.game.do_move(Action::TurnStock);
-            update_clickable_of_talon(&self.game, &mut self.card_data);
-        } else if is_mouse_button_down(MouseButton::Left) {
+        // update stuff:
+        // we don't have a turn stock action anymore so we don't have to
+        // worry about a button or turn stock
+        if is_mouse_button_down(MouseButton::Left) {
             match self.dragged_root {
                 Some(r) => {
                     // update dragged_pos for each pulled card
@@ -218,7 +152,7 @@ impl StandardGame {
                         _ => unreachable!(),
                     };
                     let from_coord = self.game.state.get_coord(root).unwrap();
-                    self.game.do_move(Action::Move(from_coord, to_coord));
+                    self.game.do_move(Action::new(from_coord, to_coord));
                     break;
                 }
             }
@@ -237,111 +171,30 @@ impl StandardGame {
         }
         clear_list(&mut self.dragged_list);
 
-        // drawing
-        //   for each card
-        //       if is being dragged then
-        //           put in dragged_list (to draw last on top of everything)
-        //       else
-        //           draw at normal zone
-        //   for each dragged card
-        //       draw at dragged_pos
-        //
-        // normal zone is based from whether we're in:
-        //   talon, foundation, tableau
-        // talon:
-        //   draw only top three cards if there are any starting from TALON_START.
-        // foundation:
-        //   draw only top card or blank if there are none.
-        // tableau:
-        //   draw each card column by column (similar to how drag zones are done
-        //   in initialize_card_data) with some face down and some up.
-
-        // draw talon
+        // draw the talon
         let talon = &self.game.state.talon;
-        if let Some(top) = talon.0.get(talon.1 as usize).copied().flatten() {
-            let mut offset = 0.0;
-            // draw underneath texture
-            draw_texture_ex(
-                &self.blank_texture,
-                TALON_START.x,
-                TALON_START.y,
-                WHITE,
-                self.params.clone(),
-            );
-            match talon.1 {
-                -1 | 0 => {
-                    // no cards underneath
-                }
-                1 => {
-                    // one card underneath
+        let mut x_offset = 0.0;
+        for (i, card) in talon.0.iter().enumerate() {
+            if let Some(c) = card {
+                if self.card_data[c].dragged_pos.is_some() {
+                    push_first(&mut self.dragged_list, *c);
+                } else {
+                    // gray out cards which aren't reachable
+                    let tint = if self.game.state.is_reachable_talon(i as u8) {
+                        WHITE
+                    } else {
+                        GRAY
+                    };
                     draw_texture_ex(
-                        &self.card_textures[&talon.0[talon.1 as usize - 1].unwrap()],
-                        TALON_START.x,
+                        &self.card_textures[c],
+                        TALON_START.x + x_offset,
                         TALON_START.y,
-                        WHITE,
+                        tint,
                         self.params.clone(),
                     );
-                    offset = OVERLAP_OFFSET;
-                }
-                _ => {
-                    // two cards underneath
-                    draw_texture_ex(
-                        &self.card_textures[&talon.0[talon.1 as usize - 2].unwrap()],
-                        TALON_START.x,
-                        TALON_START.y,
-                        WHITE,
-                        self.params.clone(),
-                    );
-                    draw_texture_ex(
-                        &self.card_textures[&talon.0[talon.1 as usize - 1].unwrap()],
-                        TALON_START.x + OVERLAP_OFFSET,
-                        TALON_START.y,
-                        WHITE,
-                        self.params.clone(),
-                    );
-                    offset = OVERLAP_OFFSET * 2.0;
                 }
             }
-            let data = self.card_data[&top];
-            if data.dragged_pos.is_some() {
-                push_first(&mut self.dragged_list, top);
-            } else {
-                draw_texture_ex(
-                    &self.card_textures[&top],
-                    TALON_START.x + offset,
-                    TALON_START.y,
-                    WHITE,
-                    self.params.clone(),
-                );
-            }
-        } else {
-            // no cards
-            draw_texture_ex(
-                &self.blank_texture,
-                TALON_START.x,
-                TALON_START.y,
-                WHITE,
-                self.params.clone(),
-            );
-        }
-
-        // draw card stock
-        if talon.1 as usize == (talon.2 as usize).wrapping_sub(1) {
-            draw_texture_ex(
-                &self.blank_texture,
-                STOCK_START.x,
-                STOCK_START.y,
-                WHITE,
-                self.params.clone(),
-            );
-        } else {
-            draw_texture_ex(
-                &self.back_texture,
-                STOCK_START.x,
-                STOCK_START.y,
-                WHITE,
-                self.params.clone(),
-            );
+            x_offset += OVERLAP_OFFSET;
         }
 
         // draw foundation
@@ -413,13 +266,13 @@ impl StandardGame {
                 );
             }
             let mut y_offset = 0.0;
-            // draw turned down cards
-            for _ in pile.0[0..pile.1 as usize].iter().flatten() {
+            // draw turned down cards as grayed out
+            for c in pile.0[0..pile.1 as usize].iter().flatten() {
                 draw_texture_ex(
-                    &self.back_texture,
+                    &self.card_textures[c],
                     TABLEAU_START.x + x_offset,
                     TABLEAU_START.y + y_offset,
-                    WHITE,
+                    GRAY,
                     self.params.clone(),
                 );
                 y_offset += OVERLAP_OFFSET;
@@ -471,12 +324,41 @@ struct CardData {
     pub clickable_zone: Option<Rect>,
 }
 
-fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
+const TALON_START: Vec2 = Vec2 {
+    x: TABLEAU_START.x,
+    y: TABLEAU_START.y - 1.5 * CARD_SIZE.y,
+};
+
+fn initialize_card_data(game: &KPlusSolitaire) -> HashMap<Card, CardData> {
     let mut map = HashMap::with_capacity(52);
 
-    // none of the stock cards are visible
-    for card in game.state.talon.0.iter().flatten() {
-        map.insert(*card, CardData::default());
+    let mut current = Rect {
+        x: TALON_START.x,
+        y: TALON_START.y,
+        w: OVERLAP_OFFSET,
+        h: CARD_SIZE.y,
+    };
+    let mut prev = None;
+    for (i, card) in game.state.talon.0.iter().flatten().enumerate() {
+        let d = if (i + 1).is_multiple_of(3) {
+            prev = Some(card);
+            CardData {
+                dragged_pos: None,
+                clickable_zone: Some(current),
+            }
+        } else {
+            prev = None;
+            CardData::default()
+        };
+        current.x += OVERLAP_OFFSET;
+        map.insert(*card, d);
+    }
+    // make sure the last card, if it is available, has the full clickable zone
+    if let Some(card) = prev {
+        let d = map.get_mut(card).unwrap();
+        let mut z = d.clickable_zone.unwrap();
+        z.w = CARD_SIZE.x;
+        d.clickable_zone = Some(z);
     }
 
     // tableau
@@ -548,25 +430,8 @@ fn initialize_card_data(game: &Solitaire) -> HashMap<Card, CardData> {
     map
 }
 
-// two card lengths from the right
-const STOCK_START: Vec2 = Vec2 {
-    x: SCREEN_WIDTH as f32 - CARD_SIZE.x * 2.0,
-    y: TOP_OFFSET,
-};
-const TALON_START: Vec2 = Vec2 {
-    x: STOCK_START.x - OVERLAP_OFFSET * 3.0 - HORIZONTAL_OFFSET,
-    y: TOP_OFFSET,
-};
-
-const TALON_BUTTON: Rect = Rect {
-    x: STOCK_START.x,
-    y: STOCK_START.y,
-    w: CARD_SIZE.x,
-    h: CARD_SIZE.y,
-};
-
 fn find_cursor_hover(
-    game: &Solitaire,
+    game: &KPlusSolitaire,
     card_data: &HashMap<Card, CardData>,
 ) -> (Vec2, Option<Card>) {
     let state = game.state;
@@ -608,9 +473,49 @@ fn find_cursor_hover(
     (Vec2::ZERO, None)
 }
 
-/// definitive clickable updater
-fn update_all_clickable(game: &Solitaire, card_data: &mut HashMap<Card, CardData>) {
-    update_clickable_of_talon(game, card_data);
+fn update_all_clickable(game: &KPlusSolitaire, card_data: &mut HashMap<Card, CardData>) {
+    // update talon
+    let mut current_zone = Rect {
+        x: TALON_START.x,
+        y: TALON_START.y,
+        w: OVERLAP_OFFSET,
+        h: CARD_SIZE.y,
+    };
+    let mut prev = None;
+    for (i, card) in game.state.talon.0.iter().enumerate() {
+        if let Some(card) = card {
+            let z = if game.state.is_reachable_talon(i as u8) {
+                prev = Some(card);
+                // the special index will be more visible
+                if game.state.talon.1 == i as i8 {
+                    // for each moved card, we have one more overlap available, but no bigger than
+                    // the card width
+                    let expanded = current_zone.w + OVERLAP_OFFSET * game.state.talon.3 as f32;
+                    // no comparing of floats, but losing fractions of a pixel shouldn't affect
+                    // much, so just cast to ints
+                    current_zone.w = min(CARD_SIZE.x as u32, expanded as u32) as f32;
+                }
+                Some(current_zone)
+            } else {
+                prev = None;
+                None
+            };
+            // more hacky resetting of mutable variables in confusing ways
+            // I'm glad to have made the least maintanable code of all time
+            current_zone.w = OVERLAP_OFFSET;
+
+            let d = card_data.get_mut(card).unwrap();
+            d.clickable_zone = z;
+        }
+        current_zone.x += OVERLAP_OFFSET;
+    }
+    // make sure the last card, if it is available, has the full clickable zone
+    if let Some(card) = prev {
+        let d = card_data.get_mut(card).unwrap();
+        let mut z = d.clickable_zone.unwrap();
+        z.w = CARD_SIZE.x;
+        d.clickable_zone = Some(z);
+    }
 
     // update tableau
     let mut current_zone = TABLEAU_START; // where each card is located
@@ -671,33 +576,5 @@ fn update_all_clickable(game: &Solitaire, card_data: &mut HashMap<Card, CardData
                 h: CARD_SIZE.y,
             });
         }
-    }
-}
-
-fn update_clickable_of_talon(game: &Solitaire, card_data: &mut HashMap<Card, CardData>) {
-    let offset = match game.state.talon.1 {
-        // nothing clickable in the talon
-        -1 => return,
-        // will be all the way to the left so no offset
-        0 => 0.0,
-        // will be one card to the right
-        1 => OVERLAP_OFFSET,
-        // will be two cards to the right
-        _ => OVERLAP_OFFSET * 2.0,
-    };
-    let talon = game.state.talon;
-    for card in talon.0[..talon.1 as usize].iter().flatten() {
-        let d = card_data.get_mut(card).unwrap();
-        d.clickable_zone = None;
-    }
-    let card = talon.0[talon.1 as usize];
-    if let Some(card) = card {
-        let clickable_zone = Rect {
-            x: TALON_START.x + offset,
-            y: TALON_START.y,
-            w: CARD_SIZE.x,
-            h: CARD_SIZE.y,
-        };
-        card_data.get_mut(&card).unwrap().clickable_zone = Some(clickable_zone);
     }
 }

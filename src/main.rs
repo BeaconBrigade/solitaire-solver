@@ -14,9 +14,12 @@ use macroquad::{
     prelude::*,
     ui::{hash, root_ui, widgets::Window},
 };
-use solitaire_game::deck::Deck;
+use solitaire_game::{
+    common::{Coord, Location},
+    deck::{Card, Deck},
+};
 
-use crate::game::standard::StandardGame;
+use crate::game::{kplus::KPlusGame, standard::StandardGame};
 
 fn window_conf() -> Conf {
     Conf {
@@ -49,27 +52,28 @@ async fn main() {
             mode = next;
         }
 
+        use Game::*;
         match &mut mode {
             Mode::Menu => {
                 if is_key_pressed(KeyCode::Escape) {
                     let already = already_playing.borrow_mut();
-                    if matches!(*already, Mode::Standard(_, _)) {
+                    if matches!(*already, Mode::Game(_, _)) {
                         // load bearing drop
                         drop(already);
                         next_mode = Some(already_playing.replace(Mode::Menu));
                     } else if selected_source == 0 {
                         let deck = Deck::new_shuffled();
                         // oh yeah, async baby
-                        next_mode = Some(Mode::Standard(
-                            Box::new(executor::block_on(StandardGame::new(deck))),
+                        next_mode = Some(Mode::Game(
+                            Box::new(S(executor::block_on(StandardGame::new(deck)))),
                             deck,
                         ));
                     } else {
                         // find a file
                         match read_deck(&deck_path) {
                             Ok(d) => {
-                                next_mode = Some(Mode::Standard(
-                                    Box::new(executor::block_on(StandardGame::new(d))),
+                                next_mode = Some(Mode::Game(
+                                    Box::new(S(executor::block_on(StandardGame::new(d)))),
                                     d,
                                 ));
                             }
@@ -107,23 +111,53 @@ async fn main() {
                             ui.input_text(hash!(), "Deck file path", &mut deck_path);
                             if ui.button(None, "Standard Solitaire") {
                                 let already = already_playing.borrow_mut();
-                                if matches!(*already, Mode::Standard(_, _)) {
+                                if matches!(*already, Mode::Game(_, _)) {
                                     // load bearing drop
                                     drop(already);
                                     next_mode = Some(already_playing.replace(Mode::Menu));
                                 } else if selected_source == 0 {
                                     let deck = Deck::new_shuffled();
                                     // oh yeah, async baby
-                                    next_mode = Some(Mode::Standard(
-                                        Box::new(executor::block_on(StandardGame::new(deck))),
+                                    next_mode = Some(Mode::Game(
+                                        Box::new(S(executor::block_on(StandardGame::new(deck)))),
                                         deck,
                                     ));
                                 } else {
                                     // find a file
                                     match read_deck(&deck_path) {
                                         Ok(d) => {
-                                            next_mode = Some(Mode::Standard(
-                                                Box::new(executor::block_on(StandardGame::new(d))),
+                                            next_mode = Some(Mode::Game(
+                                                Box::new(S(executor::block_on(StandardGame::new(
+                                                    d,
+                                                )))),
+                                                d,
+                                            ));
+                                        }
+                                        Err(e) => {
+                                            error_message = Some(e);
+                                        }
+                                    }
+                                }
+                            }
+                            if ui.button(None, "KPlus Solitaire") {
+                                let already = already_playing.borrow_mut();
+                                if matches!(*already, Mode::Game(_, _)) {
+                                    // load bearing drop
+                                    drop(already);
+                                    next_mode = Some(already_playing.replace(Mode::Menu));
+                                } else if selected_source == 0 {
+                                    let deck = Deck::new_shuffled();
+                                    // oh yeah, async baby
+                                    next_mode = Some(Mode::Game(
+                                        Box::new(K(executor::block_on(KPlusGame::new(deck)))),
+                                        deck,
+                                    ));
+                                } else {
+                                    // find a file
+                                    match read_deck(&deck_path) {
+                                        Ok(d) => {
+                                            next_mode = Some(Mode::Game(
+                                                Box::new(K(executor::block_on(KPlusGame::new(d)))),
                                                 d,
                                             ));
                                         }
@@ -134,7 +168,7 @@ async fn main() {
                                 }
                             }
                             let already = already_playing.borrow();
-                            if let Mode::Standard(_, deck) = *already {
+                            if let Mode::Game(_, deck) = *already {
                                 ui.input_text(hash!(), "Save deck path", &mut save_path);
                                 if ui.button(None, "Clear previous game") {
                                     // also a load bearing drop
@@ -147,7 +181,7 @@ async fn main() {
                         });
                 }
             }
-            Mode::Standard(game, _) => {
+            Mode::Game(game, _) => {
                 if !game.draw_frame_and_keep_playing() {
                     already_playing = Rc::new(RefCell::new(mode));
                     mode = Mode::Menu;
@@ -175,7 +209,21 @@ fn save_deck(path: &str, deck: Deck) -> Result<(), String> {
 
 enum Mode {
     Menu,
-    Standard(Box<StandardGame>, Deck),
+    Game(Box<Game>, Deck),
+}
+
+enum Game {
+    S(StandardGame),
+    K(KPlusGame),
+}
+
+impl Game {
+    fn draw_frame_and_keep_playing(&mut self) -> bool {
+        match self {
+            Game::S(s) => s.draw_frame_and_keep_playing(),
+            Game::K(k) => k.draw_frame_and_keep_playing(),
+        }
+    }
 }
 
 const WINDOW_START: Vec2 = Vec2 {
@@ -202,3 +250,164 @@ pub const COVERED_CARD_SIZE: Vec2 = Vec2 {
 
 pub const TOP_OFFSET: f32 = CARD_SIZE.y * 0.29;
 pub const HORIZONTAL_OFFSET: f32 = CARD_SIZE.x * 1.29;
+
+const FOUNDATION_START: Vec2 = Vec2 {
+    x: CARD_SIZE.x,
+    y: TOP_OFFSET,
+};
+const TABLEAU_START: Vec2 = Vec2 {
+    x: CARD_SIZE.x,
+    y: CARD_SIZE.y * 3.25,
+};
+
+const DROP_MAP: [(Rect, Coord); 11] = [
+    // foundations
+    (
+        Rect {
+            x: FOUNDATION_START.x,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(0),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(1),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * 2.0,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(2),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: FOUNDATION_START.x + HORIZONTAL_OFFSET * 3.0,
+            y: FOUNDATION_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y,
+        },
+        Coord {
+            location: Location::Foundation(3),
+            idx: 0,
+        },
+    ),
+    // tableau
+    (
+        Rect {
+            x: TABLEAU_START.x,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(0),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(1),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 2.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(2),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 3.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(3),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 4.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(4),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 5.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(5),
+            idx: 0,
+        },
+    ),
+    (
+        Rect {
+            x: TABLEAU_START.x + HORIZONTAL_OFFSET * 6.0,
+            y: TABLEAU_START.y,
+            w: CARD_SIZE.x,
+            h: CARD_SIZE.y + OVERLAP_OFFSET * 18.0,
+        },
+        Coord {
+            location: Location::Tableau(6),
+            idx: 0,
+        },
+    ),
+];
+
+fn push_first(arr: &mut [Option<Card>; 13], item: Card) {
+    for (i, c) in arr.iter().enumerate() {
+        if c.is_none() {
+            arr[i] = Some(item);
+            return;
+        }
+    }
+}
+
+fn clear_list(dragged_list: &mut [Option<Card>; 13]) {
+    for c in dragged_list.iter_mut() {
+        *c = None;
+    }
+}

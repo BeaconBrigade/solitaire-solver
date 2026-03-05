@@ -11,7 +11,7 @@ members = ["crates/solitaire-game", "crates/solitaire-solver"]
 [dependencies]
 futures = "0.3.31"
 macroquad = "0.4.14"
-solitaire-game = { version = "0.1.0", path = "crates/solitaire-game" }
+solitaire-game = { version = "0.2.0", path = "crates/solitaire-game", features = ["standard", "kplus"] }
 
 [patch.crates-io]
 miniquad = { git = "https://github.com/beaconbrigade/miniquad", branch = "double-click-patch" }
