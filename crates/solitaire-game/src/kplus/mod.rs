@@ -7,7 +7,7 @@ use crate::{
 pub mod action;
 pub mod state;
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct KPlusSolitaire {
     pub state: State,
 }

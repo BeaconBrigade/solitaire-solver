@@ -41,6 +41,8 @@ pub struct StandardGame {
     card_textures: HashMap<Card, Texture2D>,
     blank_texture: Texture2D,
     back_texture: Texture2D,
+
+    positions: Vec<Solitaire>,
 }
 
 impl StandardGame {
@@ -72,6 +74,7 @@ impl StandardGame {
             dragged_list: [None; 13],
             cursor_offset: Vec2::ZERO,
             card_data,
+            positions: Vec::from([game]),
         }
     }
 
@@ -88,6 +91,33 @@ impl StandardGame {
         ) {
             return false;
         }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 100.0,
+                y: 10.0,
+            },
+            "Undo",
+        ) {
+            if let Some(game) = self.positions.pop() {
+                self.game = game;
+            }
+            update_all_clickable(&self.game, &mut self.card_data);
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 200.0,
+                y: 10.0,
+            },
+            "Restart",
+        ) {
+            if let Some(game) = self.positions.first().copied() {
+                self.game = game;
+                self.positions.clear();
+                self.positions.push(game);
+                self.card_data = initialize_card_data(&self.game);
+            }
+        }
+
         //
         // We'll need to store what is being dragged and the position of everything which isn't
         // dragged. Drop zones will need to be known (and bigger than the clickable areas of each
@@ -138,7 +168,12 @@ impl StandardGame {
             && is_mouse_button_pressed(MouseButton::Left)
             && TALON_BUTTON.contains(m)
         {
+            let prev = self.game;
             self.game.do_move(Action::TurnStock);
+            if self.game != prev {
+                self.positions.push(prev);
+            }
+
             update_clickable_of_talon(&self.game, &mut self.card_data);
         } else if is_mouse_button_down(MouseButton::Left) {
             match self.dragged_root {
@@ -218,7 +253,11 @@ impl StandardGame {
                         _ => unreachable!(),
                     };
                     let from_coord = self.game.state.get_coord(root).unwrap();
+                    let prev = self.game;
                     self.game.do_move(Action::Move(from_coord, to_coord));
+                    if self.game != prev {
+                        self.positions.push(prev);
+                    }
                     break;
                 }
             }

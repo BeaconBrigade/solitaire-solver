@@ -7,7 +7,7 @@ use crate::{
 };
 
 /// Representation of Solitaire using [K+ solitaire](https://web.engr.oregonstate.edu/~afern/papers/solitaire.pdf)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
     // pile.1 is the index where face up cards start
     pub tableau: [([Option<Card>; 19], u8); 7],
