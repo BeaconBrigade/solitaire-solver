@@ -301,6 +301,16 @@ impl State {
 
         None
     }
+
+    /// Checks if the game is won
+    ///
+    /// Is pretty lazy and just checks the last card in the foundation is full
+    pub fn is_win(&self) -> bool {
+        self.foundation[0][12].is_some()
+            && self.foundation[1][12].is_some()
+            && self.foundation[2][12].is_some()
+            && self.foundation[3][12].is_some()
+    }
 }
 
 impl Default for State {

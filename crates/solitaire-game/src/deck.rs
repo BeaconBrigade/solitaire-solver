@@ -86,6 +86,32 @@ impl Card {
             || ((self.suit == Suit::Clubs || self.suit == Suit::Spades)
                 && (other.suit == Suit::Clubs || other.suit == Suit::Spades))
     }
+
+    pub fn colour_pair(&self) -> Card {
+        Self {
+            suit: self.suit.matching_suit(),
+            value: self.value,
+        }
+    }
+
+    pub fn build_cards(&self) -> Option<(Card, Card)> {
+        if self.value == Value::Ace {
+            None
+        } else {
+            let b = self.value.below();
+            let o = self.suit.other_colour();
+            Some((
+                Self {
+                    value: b,
+                    suit: o,
+                },
+                Self {
+                    value: b,
+                    suit: o.matching_suit(),
+                },
+            ))
+        }
+    }
 }
 
 impl Display for Card {
@@ -108,8 +134,22 @@ impl FromStr for Card {
 pub enum Suit {
     Hearts = 0,
     Spades = 1,
-    Clubs = 2,
-    Diamonds = 3,
+    Diamonds = 2,
+    Clubs = 3,
+}
+
+impl Suit {
+    fn matching_suit(&self) -> Suit {
+        let x = (*self as u8 + 2) % 4;
+
+        // mod 4 guarantees to map into our domain, so this is completely safe
+        unsafe { *((&x as *const u8) as *const Suit) }
+    }
+
+    fn other_colour(&self) -> Suit {
+        let x = (*self as u8 + 1) % 4;
+        unsafe { *((&x as *const u8) as *const Suit) }
+    }
 }
 
 impl Display for Suit {
@@ -141,7 +181,7 @@ impl FromStr for Suit {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum Value {
     Ace = 1,
@@ -157,6 +197,13 @@ pub enum Value {
     Jack = 11,
     Queen = 12,
     King = 13,
+}
+
+impl Value {
+    fn below(&self) -> Value {
+        let x = (*self as u8 - 1) % 13;
+        unsafe { *((&x as *const u8) as *const Value) }
+    }
 }
 
 impl Display for Value {
