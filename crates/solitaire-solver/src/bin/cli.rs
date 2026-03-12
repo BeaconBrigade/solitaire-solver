@@ -48,9 +48,11 @@ fn main() {
 fn solve(deck: String, method: String, json: bool) {
     let game = KPlusSolitaire::with_deck(Deck::from_str(&deck).unwrap());
 
-    let now = Instant::now();
-    let sol = match method.to_lowercase().as_str() {
-        "greedy" => greedy_solve(game.clone()),
+    let (now, sol) = match method.to_lowercase().as_str() {
+        "greedy" => {
+            let now = Instant::now();
+            (now, greedy_solve(game.clone()))
+        }
         _ => {
             print_method_not_found();
             return;
