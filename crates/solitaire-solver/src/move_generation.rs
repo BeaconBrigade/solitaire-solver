@@ -3,7 +3,7 @@
 //! This is where the solver generates the moves to evaluate
 
 use solitaire_game::{
-    common::{Coord, Location, find_last_idx},
+    common::{find_last_idx, Coord, Location},
     kplus::{action::Action, state::State},
 };
 
@@ -52,6 +52,10 @@ pub fn generate_moves(state: &State) -> Vec<Action> {
                     .map(|i| i as u8 + 1)
                     .unwrap_or(0),
             );
+            // tableau is full
+            if to.idx > 18 {
+                continue;
+            }
             let a = Action::new(from, to);
             if state.is_valid_move(a) {
                 moves.push(a);
@@ -78,6 +82,10 @@ pub fn generate_moves(state: &State) -> Vec<Action> {
                         .map(|i| i as u8 + 1)
                         .unwrap_or(0),
                 );
+                // pile is full
+                if to.idx > 12 {
+                    continue;
+                }
                 let a = Action::new(from, to);
                 if state.is_valid_move(a) {
                     moves.push(a);
@@ -97,6 +105,10 @@ pub fn generate_moves(state: &State) -> Vec<Action> {
                         .map(|i| i as u8 + 1)
                         .unwrap_or(0),
                 );
+                // tableau pile is full
+                if to.idx > 18 {
+                    continue;
+                }
                 let a = Action::new(from, to);
                 if state.is_valid_move(a) {
                     moves.push(a);
@@ -119,8 +131,8 @@ pub fn generate_moves(state: &State) -> Vec<Action> {
                     .map(|i| i as u8 + 1)
                     .unwrap_or(0),
             );
-            // pile is full
-            if to.idx > 12 {
+            // tableau pile is full
+            if to.idx > 18 {
                 continue;
             }
             let a = Action::new(from, to);
