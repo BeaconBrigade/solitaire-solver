@@ -51,7 +51,7 @@ fn solve(deck: String, method: String, json: bool) {
     let (now, sol) = match method.to_lowercase().as_str() {
         "greedy" => {
             let now = Instant::now();
-            (now, greedy_solve(game.clone()))
+            (now, greedy_solve(game))
         }
         _ => {
             print_method_not_found();
@@ -63,13 +63,11 @@ fn solve(deck: String, method: String, json: bool) {
     if json {
         let j = solution_to_json(sol, elapsed);
         println!("{}", j);
+    } else if let Some(sol) = sol {
+        println!("Solution found in {:?}", elapsed);
+        println!("{sol:?}");
     } else {
-        if let Some(sol) = sol {
-            println!("Solution found in {:?}", elapsed);
-            println!("{sol:?}");
-        } else {
-            println!("No solution found in {:?}", elapsed);
-        }
+        println!("No solution found in {:?}", elapsed);
     }
 }
 
@@ -91,8 +89,8 @@ fn print_help() {
     println!(
         "interface to solve solitaire puzzles on the command line and report statistics on solving"
     );
-    println!("\tusage:\t{} <command> [opts]", env::args().nth(0).unwrap());
-    println!("");
+    println!("\tusage:\t{} <command> [opts]", env::args().next().unwrap());
+    println!();
     println!("Available commands:");
     println!("\tsolve <method> <path> [-j | --json]: solve a puzzle located at <path> using <method> (use - for stdin) use -j for json structured output");
     println!("\t\tavailable methods: greedy");
@@ -108,7 +106,7 @@ fn print_random() {
 fn print_no_path() {
     println!(
         "usage:\t{} solve <method> <path> [-j | --json]",
-        env::args().nth(0).unwrap()
+        env::args().next().unwrap()
     );
     println!("error: path is missing");
 }
@@ -116,7 +114,7 @@ fn print_no_path() {
 fn print_no_method() {
     println!(
         "usage:\t{} solve <method> <path> [-j | --json]",
-        env::args().nth(0).unwrap()
+        env::args().next().unwrap()
     );
     println!("error: method is missing");
 }
@@ -124,7 +122,7 @@ fn print_no_method() {
 fn print_method_not_found() {
     println!(
         "usage:\t{} solve <method> <path> [-j | --json]",
-        env::args().nth(0).unwrap()
+        env::args().next().unwrap()
     );
     println!("error: method is missing");
     println!("available methods: greedy");
@@ -133,7 +131,7 @@ fn print_method_not_found() {
 fn print_path_not_found(path: &str) {
     println!(
         "usage:\t{} solve <path> [-j | --json]",
-        env::args().nth(0).unwrap()
+        env::args().next().unwrap()
     );
     println!("error: could not read file: {path}");
 }
