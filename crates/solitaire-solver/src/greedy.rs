@@ -41,7 +41,7 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     }
 }
 
-pub fn greedy(mut state: State, cache: &mut LruCache<State, isize>) -> isize {
+fn greedy(mut state: State, cache: &mut LruCache<State, isize>) -> isize {
     let mut actions = generate_moves(&state);
     while !state.is_win() && actions.len() > 0 {
         let mut max = (isize::MIN, None);
