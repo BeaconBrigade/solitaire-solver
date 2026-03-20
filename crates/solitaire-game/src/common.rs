@@ -1,6 +1,11 @@
 //! common functions to help working with states
 
+use std::{fmt::Display, str::FromStr};
+
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Coord {
     pub location: Location,
     pub idx: u8,
@@ -13,12 +18,41 @@ impl Coord {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Location {
     /// Contains which foundation stack this coord is in
     Foundation(u8),
     /// Contains which tableau stack this coord is in
     Tableau(u8),
     Talon,
+}
+
+impl Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Foundation(p) => write!(f, "Foundation-{}", p),
+            Self::Tableau(p) => write!(f, "Tableau-{}", p),
+            Self::Talon => write!(f, "Talon"),
+        }
+    }
+}
+
+impl FromStr for Location {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((location, pile)) = s.split_once('-') {
+            match location {
+                "Foundation" => Ok(Self::Foundation(FromStr::from_str(pile).map_err(|_| ())?)),
+                "Tableau" => Ok(Self::Tableau(FromStr::from_str(pile).map_err(|_| ())?)),
+                _ => Err(()),
+            }
+        } else if s == "Talon" {
+            Ok(Self::Talon)
+        } else {
+            Err(())
+        }
+    }
 }
 
 pub(crate) fn iter_to_arr<const N: usize, T: Copy>(

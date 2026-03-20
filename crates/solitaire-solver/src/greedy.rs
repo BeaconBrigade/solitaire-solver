@@ -1,26 +1,36 @@
 use std::num::NonZeroUsize;
 
 use lru::LruCache;
-use solitaire_game::kplus::{KPlusSolitaire, state::State};
+use solitaire_game::kplus::{state::State, KPlusSolitaire};
 
-use crate::{Solution, heuristic::h_greed, move_generation::generate_moves};
+use crate::{heuristic::h_greed, move_generation::generate_moves, Eval, Solution};
 
 pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     let mut moves = Vec::new();
     let mut actions = generate_moves(&game.state);
+    let mut root_path = Vec::new();
     // every heuristic level needs its own cache
     let mut cache = LruCache::new(NonZeroUsize::new(50_000).unwrap());
-    let mut greedy_cache = LruCache::new(NonZeroUsize::new(50_000).unwrap());
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (isize::MIN, None);
+        root_path.push(game.state);
         for a in actions {
             let n = game.state.apply(a);
             // don't revisit nodes
             if cache.get(&n).is_some() {
                 continue;
             }
-            let h = greedy(n, &mut greedy_cache);
-            cache.put(n, h);
+            let eval = greedy(n, root_path.clone());
+            let h = match eval {
+                Eval::Loss => continue,
+                Eval::Win(mut rest_of_moves) => {
+                    moves.push(a);
+                    moves.append(&mut rest_of_moves);
+                    return Some(Solution { moves });
+                }
+                Eval::H(h) => h,
+            };
+            cache.put(n, ());
             if max.0 < h {
                 max = (h, Some(a));
             }
@@ -39,18 +49,23 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     }
 }
 
-fn greedy(mut state: State, cache: &mut LruCache<State, isize>) -> isize {
+pub fn greedy(mut state: State, mut root_path: Vec<State>) -> Eval {
+    let mut moves = Vec::new();
     let mut actions = generate_moves(&state);
     while !state.is_win() && !actions.is_empty() {
+        // loop prevention
+        if root_path.contains(&state) {
+            return Eval::Loss;
+        }
+        root_path.push(state);
         let mut max = (isize::MIN, None);
         for a in actions {
             let n = state.apply(a);
             // we've already visited this node, so we're in a loop
-            if cache.get(&n).is_some() {
+            if root_path.contains(&n) {
                 continue;
             }
             let h = h_greed(&n);
-            cache.put(n, h);
             if max.0 < h {
                 max = (h, Some(a));
             }
@@ -58,11 +73,15 @@ fn greedy(mut state: State, cache: &mut LruCache<State, isize>) -> isize {
         // every action takes us back somewhere we've been, it's a dead end
         // or we are just researching here which is bad
         let Some(a) = max.1 else {
-            return isize::MIN;
+            return Eval::Loss;
         };
+        moves.push(a);
         state = state.apply(a);
         actions = generate_moves(&state);
     }
-
-    h_greed(&state)
+    if state.is_win() {
+        Eval::Win(moves)
+    } else {
+        Eval::H(h_greed(&state))
+    }
 }

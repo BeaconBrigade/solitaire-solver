@@ -85,15 +85,15 @@ impl State {
                 let mut shifted = 0;
                 // check if we have a special index (or if we had one and used up all the cards to
                 // the left)
-                if (self.talon.1 >= 0 || self.talon.3 > 0) && self.talon.1 != action.from.idx as i8 {
+                if (self.talon.1 >= 0 || self.talon.3 > 0) && self.talon.1 != action.from.idx as i8
+                {
                     // if the special index is after where we shift, we need to
                     // adjust the special index to account for the shift
                     if action.from.idx as i8 > self.talon.1 {
                         shifted = new.talon.3;
                     }
                     // rotate from the old special index to remove blanks
-                    new.talon.0[new.talon.1 as usize + 1..]
-                        .rotate_left(new.talon.3 as usize);
+                    new.talon.0[new.talon.1 as usize + 1..].rotate_left(new.talon.3 as usize);
                     new.talon.3 = 0;
                 }
                 new.talon.3 += 1;
@@ -142,7 +142,7 @@ impl State {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize],
             Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize],
             // do flatten last so we actually count blank spaces in the talon
-            Location::Talon => self.talon.0.iter().nth(pos.idx as usize).copied().flatten(),
+            Location::Talon => self.talon.0.get(pos.idx as usize).copied().flatten(),
         }
     }
 

@@ -101,10 +101,7 @@ impl Card {
             let b = self.value.below();
             let o = self.suit.other_colour();
             Some((
-                Self {
-                    value: b,
-                    suit: o,
-                },
+                Self { value: b, suit: o },
                 Self {
                     value: b,
                     suit: o.matching_suit(),
