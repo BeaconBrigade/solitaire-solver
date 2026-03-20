@@ -145,41 +145,46 @@ def main():
         ]
         pbar = tqdm(total=len(futures), desc="Solving")
 
-        for f in as_completed(futures):
-            status, t, actions, seed = f.result()
+        try:
+            for f in as_completed(futures):
+                status, t, actions, seed = f.result()
 
-            if status == "success":
-                successes += 1
-                all_times.append(t)
-                success_times.append(t)
+                if status == "success":
+                    successes += 1
+                    all_times.append(t)
+                    success_times.append(t)
 
-                valid, err = verify_solution(seed, actions)
+                    valid, err = verify_solution(seed, actions)
 
-                if valid:
-                    verified_successes += 1
+                    if valid:
+                        verified_successes += 1
+                    else:
+                        invalid_solutions += 1
+                        print("===== INVALID SOLUTION =====")
+                        print("seed:", seed.replace('\n', ' '))
+                        print("error:", err)
+                elif status == "failure":
+                    failures += 1
+                    all_times.append(t)
+                    failure_times.append(t)
+                elif status == "timeout":
+                    failures += 1
+                    timeouts += 1
                 else:
-                    invalid_solutions += 1
-                    print("===== INVALID SOLUTION =====")
-                    print("seed:", seed.replace('\n', ' '))
-                    print("error:", err)
-            elif status == "failure":
-                failures += 1
-                all_times.append(t)
-                failure_times.append(t)
-            elif status == "timeout":
-                failures += 1
-                timeouts += 1
-            else:
-                failures += 1
+                    failures += 1
 
-            pbar.set_postfix(
-                success=successes,
-                fail=failures,
-                invalid=invalid_solutions
-            )
-            pbar.update(1)
-
-        pbar.close()
+                pbar.set_postfix(
+                    success=successes,
+                    fail=failures,
+                    invalid=invalid_solutions
+                )
+                pbar.update(1)
+        except KeyboardInterrupt:
+            for future in futures:
+                future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+        finally:
+            pbar.close()
 
     print("=== Benchmark Results ===")
     print(f"method: {args.method}")

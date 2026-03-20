@@ -1,4 +1,4 @@
-use std::num::NonZeroUsize;
+use std::{collections::HashMap, num::NonZeroUsize};
 
 use lru::LruCache;
 use solitaire_game::kplus::{state::State, KPlusSolitaire};
@@ -8,12 +8,12 @@ use crate::{heuristic::h_greed, move_generation::generate_moves, Eval, Solution}
 pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     let mut moves = Vec::new();
     let mut actions = generate_moves(&game.state);
-    let mut root_path = Vec::new();
+    let mut root_path = HashMap::new();
     // every heuristic level needs its own cache
     let mut cache = LruCache::new(NonZeroUsize::new(50_000).unwrap());
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (isize::MIN, None);
-        root_path.push(game.state);
+        root_path.insert(game.state, ());
         for a in actions {
             let n = game.state.apply(a);
             // don't revisit nodes
@@ -49,20 +49,20 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     }
 }
 
-pub fn greedy(mut state: State, mut root_path: Vec<State>) -> Eval {
+pub fn greedy(mut state: State, mut root_path: HashMap<State, ()>) -> Eval {
     let mut moves = Vec::new();
     let mut actions = generate_moves(&state);
     while !state.is_win() && !actions.is_empty() {
         // loop prevention
-        if root_path.contains(&state) {
+        if root_path.get(&state).is_some() {
             return Eval::Loss;
         }
-        root_path.push(state);
+        root_path.insert(state, ());
         let mut max = (isize::MIN, None);
         for a in actions {
             let n = state.apply(a);
             // we've already visited this node, so we're in a loop
-            if root_path.contains(&n) {
+            if root_path.get(&state).is_some() {
                 continue;
             }
             let h = h_greed(&n);

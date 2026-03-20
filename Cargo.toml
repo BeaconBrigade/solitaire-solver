@@ -16,3 +16,7 @@ solitaire-solver = { version = "0.1.0", path = "crates/solitaire-solver" }
 
 [patch.crates-io]
 miniquad = { git = "https://github.com/beaconbrigade/miniquad", branch = "double-click-patch" }
+
+[profile.profiling]
+inherits = "release"
+debug = true

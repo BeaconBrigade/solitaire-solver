@@ -1,4 +1,4 @@
-use std::num::NonZeroUsize;
+use std::{collections::HashMap, num::NonZeroUsize};
 
 use lru::LruCache;
 use solitaire_game::kplus::{state::State, KPlusSolitaire};
@@ -13,7 +13,7 @@ pub fn nested_rollout_solve(mut game: KPlusSolitaire, n: usize) -> Option<Soluti
     let mut moves = Vec::new();
     let mut actions = generate_moves(&game.state);
     let mut caches = Vec::new();
-    let mut root_path = Vec::new();
+    let mut root_path = HashMap::new();
     // extra cache for this outer level + n for the nested levels
     for _ in 0..=n {
         caches.push(LruCache::new(NonZeroUsize::new(50_000).unwrap()));
@@ -21,7 +21,7 @@ pub fn nested_rollout_solve(mut game: KPlusSolitaire, n: usize) -> Option<Soluti
     let mut caches = caches.iter_mut().collect::<Vec<&mut _>>();
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (Eval::Loss, None);
-        root_path.push(game.state);
+        root_path.insert(game.state, ());
         for a in actions {
             let next = game.state.apply(a);
             // don't revisit nodes
@@ -59,11 +59,11 @@ fn nested_rollout(
     mut state: State,
     caches: &mut [&mut LruCache<State, ()>],
     n: usize,
-    mut root_path: Vec<State>,
+    mut root_path: HashMap<State, ()>,
 ) -> Eval {
     if state.is_win() {
         return Eval::Win(Vec::new());
-    } else if root_path.contains(&state) {
+    } else if root_path.get(&state).is_some() {
         // we're in an infinite loop
         return Eval::Loss;
     }
@@ -77,7 +77,7 @@ fn nested_rollout(
     let mut moves = Vec::new();
 
     while !state.is_win() && !actions.is_empty() {
-        root_path.push(state);
+        root_path.insert(state, ());
         let mut max = (Eval::Loss, None);
         for a in actions {
             let next = state.apply(a);
