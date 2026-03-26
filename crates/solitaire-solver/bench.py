@@ -2,11 +2,29 @@
 
 import argparse
 import datetime
+import math
 import subprocess
 import json
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
+
+
+def win_rate_ci(successes, n, z=1.96):
+    # use Wilson score just because
+    if n == 0:
+        return (0.0, 0.0, 0.0)
+
+    p = successes / n
+
+    denom = 1 + z**2 / n
+    center = (p + z**2 / (2*n)) / denom
+    margin = (z * math.sqrt((p*(1-p) + z**2/(4*n)) / n)) / denom
+
+    lower = center - margin
+    upper = center + margin
+
+    return p, lower, upper
 
 
 def summarize(times):
@@ -198,7 +216,10 @@ def main():
     print(f"timeouts: {timeouts}")
     print(f"verified successes: {verified_successes}")
     print(f"invalid solutions: {invalid_solutions}")
-    print(f"success rate: {successes / args.iterations:.3f}")
+
+    p, lo, hi = win_rate_ci(successes, args.iterations)
+    print(f"win rate: {p:.4f} ({p*100:.2f}%)")
+    print(f"95% CI: [{lo:.4f}, {hi:.4f}] ({lo*100:.2f}% - {hi*100:.2f}%)")
     print()
 
     print("overall time stats:")
