@@ -21,7 +21,7 @@ pub fn nested_rollout_solve(mut game: KPlusSolitaire, n: usize) -> Option<Soluti
     let mut caches = caches.iter_mut().collect::<Vec<&mut _>>();
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (Eval::Loss, None);
-        root_path.insert(game.state, ());
+        root_path.insert(game.state, n);
         for a in actions {
             let next = game.state.apply(a);
             // don't revisit nodes
@@ -59,11 +59,11 @@ fn nested_rollout(
     mut state: State,
     caches: &mut [&mut LruCache<State, ()>],
     n: usize,
-    mut root_path: HashMap<State, ()>,
+    mut root_path: HashMap<State, usize>,
 ) -> Eval {
     if state.is_win() {
         return Eval::Win(Vec::new());
-    } else if root_path.get(&state).is_some() {
+    } else if root_path.get(&state).copied() == Some(n) {
         // we're in an infinite loop
         return Eval::Loss;
     }
@@ -77,7 +77,7 @@ fn nested_rollout(
     let mut moves = Vec::new();
 
     while !state.is_win() && !actions.is_empty() {
-        root_path.insert(state, ());
+        root_path.insert(state, n);
         let mut max = (Eval::Loss, None);
         for a in actions {
             let next = state.apply(a);
@@ -87,18 +87,21 @@ fn nested_rollout(
                 nested_rollout(next, &mut caches[1..], n - 1, root_path.clone())
             };
 
-            if max.0 < eval {
+            // use the 'or' so if there's at least one move even if it results
+            // in a loss, it is stored there
+            if max.0 < eval || max.0 == Eval::Loss {
                 max = (eval, Some(a));
             }
         }
-        match max.0 {
-            Eval::Win(mut actions) => {
-                moves.push(max.1.unwrap());
+        match max {
+            (Eval::Win(mut actions), a) => {
+                moves.push(a.unwrap());
                 moves.append(&mut actions);
                 return Eval::Win(moves);
             }
-            Eval::Loss => return Eval::H(h_greed(&state)),
-            Eval::H(_) => {}
+            (Eval::Loss, None) => return Eval::H(h_greed(&state)),
+            (Eval::Loss, Some(_)) => {}
+            (Eval::H(_), _) => {}
         }
         if n > 0 {
             caches[0].put(state, ());

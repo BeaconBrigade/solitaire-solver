@@ -13,7 +13,7 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     let mut cache = LruCache::new(NonZeroUsize::new(50_000).unwrap());
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (isize::MIN, None);
-        root_path.insert(game.state, ());
+        root_path.insert(game.state, 0);
         for a in actions {
             let n = game.state.apply(a);
             // don't revisit nodes
@@ -49,20 +49,20 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     }
 }
 
-pub fn greedy(mut state: State, mut root_path: HashMap<State, ()>) -> Eval {
+pub fn greedy(mut state: State, mut root_path: HashMap<State, usize>) -> Eval {
     let mut moves = Vec::new();
     let mut actions = generate_moves(&state);
     while !state.is_win() && !actions.is_empty() {
         // loop prevention
-        if root_path.get(&state).is_some() {
+        if root_path.contains_key(&state) {
             return Eval::Loss;
         }
-        root_path.insert(state, ());
+        root_path.insert(state, 0);
         let mut max = (isize::MIN, None);
         for a in actions {
             let n = state.apply(a);
             // we've already visited this node, so we're in a loop
-            if root_path.get(&state).is_some() {
+            if root_path.contains_key(&n) {
                 continue;
             }
             let h = h_greed(&n);
