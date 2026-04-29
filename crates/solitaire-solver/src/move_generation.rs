@@ -4,10 +4,10 @@
 
 use solitaire_game::{
     common::{find_last_idx, Coord, Location},
-    kplus::{action::Action, KPlusSolitaire},
+    kplus::{action::Action, state::State},
 };
 
-pub fn generate_moves(game: &KPlusSolitaire) -> Vec<Action> {
+pub fn generate_moves(state: &State) -> Vec<Action> {
     // for each available card in the talon we need to check:
     // - can it move to any column in the foundation (max 1)
     // - can it move to any column in the tableau
@@ -20,13 +20,13 @@ pub fn generate_moves(game: &KPlusSolitaire) -> Vec<Action> {
     // e.g.: moving an ace from foundation to tableau
     let mut moves = Vec::new();
     let mut from = Coord::new(Location::Talon, 0);
-    for card in game.state.talon.0.iter() {
+    for card in state.talon.0.iter() {
         if card.is_none() {
             from.idx += 1;
             continue;
         }
         // check foundation
-        for (p, pile) in game.state.foundation.iter().enumerate() {
+        for (p, pile) in state.foundation.iter().enumerate() {
             let to = Coord::new(
                 Location::Foundation(p as u8),
                 find_last_idx(pile.iter(), |c| c.is_some())
@@ -38,22 +38,26 @@ pub fn generate_moves(game: &KPlusSolitaire) -> Vec<Action> {
                 continue;
             }
             let a = Action::new(from, to);
-            if game.state.is_valid_move(a) {
+            if state.is_valid_move(a) {
                 moves.push(a);
                 // can only move to one column at a time
                 break;
             }
         }
         // check tableau
-        for (p, pile) in game.state.tableau.iter().enumerate() {
+        for (p, pile) in state.tableau.iter().enumerate() {
             let to = Coord::new(
                 Location::Tableau(p as u8),
                 find_last_idx(pile.0.iter(), |c| c.is_some())
                     .map(|i| i as u8 + 1)
                     .unwrap_or(0),
             );
+            // tableau is full
+            if to.idx > 18 {
+                continue;
+            }
             let a = Action::new(from, to);
-            if game.state.is_valid_move(a) {
+            if state.is_valid_move(a) {
                 moves.push(a);
                 // can only move into one pile unless we're a king and
                 // then it doesn't matter
@@ -66,27 +70,31 @@ pub fn generate_moves(game: &KPlusSolitaire) -> Vec<Action> {
 
     // check tableau
     let mut from = Coord::new(Location::Tableau(0), 0);
-    for (p, pile) in game.state.tableau.iter().enumerate() {
+    for (p, pile) in state.tableau.iter().enumerate() {
         from.location = Location::Tableau(p as u8);
         from.idx = pile.1;
         for _ in pile.0[pile.1 as usize..].iter().flatten() {
             // check moves into the foundation
-            for (p_f, pile_f) in game.state.foundation.iter().enumerate() {
+            for (p_f, pile_f) in state.foundation.iter().enumerate() {
                 let to = Coord::new(
                     Location::Foundation(p_f as u8),
                     find_last_idx(pile_f.iter(), |c| c.is_some())
                         .map(|i| i as u8 + 1)
                         .unwrap_or(0),
                 );
+                // pile is full
+                if to.idx > 12 {
+                    continue;
+                }
                 let a = Action::new(from, to);
-                if game.state.is_valid_move(a) {
+                if state.is_valid_move(a) {
                     moves.push(a);
                     // can only move to one column at a time
                     break;
                 }
             }
             // check moves into the tableau
-            for (p_t, pile_t) in game.state.tableau.iter().enumerate() {
+            for (p_t, pile_t) in state.tableau.iter().enumerate() {
                 // don't search within our pile
                 if p_t == p {
                     continue;
@@ -97,8 +105,12 @@ pub fn generate_moves(game: &KPlusSolitaire) -> Vec<Action> {
                         .map(|i| i as u8 + 1)
                         .unwrap_or(0),
                 );
+                // tableau pile is full
+                if to.idx > 18 {
+                    continue;
+                }
                 let a = Action::new(from, to);
-                if game.state.is_valid_move(a) {
+                if state.is_valid_move(a) {
                     moves.push(a);
                 }
             }
@@ -107,24 +119,24 @@ pub fn generate_moves(game: &KPlusSolitaire) -> Vec<Action> {
     }
 
     // check foundation
-    for (p, pile) in game.state.foundation.iter().enumerate() {
+    for (p, pile) in state.foundation.iter().enumerate() {
         let Some(idx) = find_last_idx(pile.iter(), |c| c.is_some()) else {
             continue;
         };
         let from = Coord::new(Location::Foundation(p as u8), idx as u8);
-        for (p_t, pile_t) in game.state.tableau.iter().enumerate() {
+        for (p_t, pile_t) in state.tableau.iter().enumerate() {
             let to = Coord::new(
                 Location::Tableau(p_t as u8),
                 find_last_idx(pile_t.0.iter(), |c| c.is_some())
                     .map(|i| i as u8 + 1)
                     .unwrap_or(0),
             );
-            // pile is full
-            if to.idx > 12 {
+            // tableau pile is full
+            if to.idx > 18 {
                 continue;
             }
             let a = Action::new(from, to);
-            if game.state.is_valid_move(a) {
+            if state.is_valid_move(a) {
                 moves.push(a);
                 // if we can move to one pile, we can't move to another
                 // or: we are a king and it doesn't matter
@@ -178,6 +190,7 @@ mod tests {
         )
         .unwrap();
         let game = KPlusSolitaire::with_deck(d);
+        let game = game.state;
         let moves = generate_moves(&game);
         let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
         let required = [
@@ -194,6 +207,7 @@ mod tests {
     #[test]
     fn almost_done() {
         let game = KPlusSolitaire::new_almost_completed();
+        let game = game.state;
         let moves = generate_moves(&game);
         let set: HashSet<Action> = moves.into_iter().collect();
         let required = [
@@ -215,6 +229,7 @@ mod tests {
             "Spades Three\nDiamonds Ace\nClubs Five\nSpades Jack\nClubs Jack\nClubs Three\nHearts Nine\nHearts Three\nDiamonds Nine\nSpades Four\nClubs Seven\nClubs Eight\nSpades King\nSpades Eight\nHearts Eight\nHearts Queen\nHearts Six\nSpades Queen\nSpades Ace\nSpades Five\nSpades Nine\nDiamonds Two\nHearts Ten\nClubs Two\nClubs King\nHearts King\nClubs Ten\nHearts Five\nDiamonds Five\nDiamonds Seven\nSpades Ten\nHearts Ace\nDiamonds King\nHearts Seven\nClubs Nine\nDiamonds Three\nClubs Queen\nDiamonds Ten\nDiamonds Eight\nSpades Six\nDiamonds Six\nSpades Seven\nClubs Six\nDiamonds Jack\nDiamonds Queen\nHearts Four\nClubs Four\nDiamonds Four\nClubs Ace\nHearts Two\nHearts Jack\nSpades Two\n"
         ).unwrap();
         let game = KPlusSolitaire::with_deck(d);
+        let game = game.state;
         let moves = generate_moves(&game);
         let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
         let required = [
@@ -236,6 +251,7 @@ mod tests {
         ).unwrap();
 
         let game = KPlusSolitaire::with_deck(d);
+        let game = game.state;
         let moves = generate_moves(&game);
         let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
         let required = [
@@ -261,6 +277,7 @@ mod tests {
         ).unwrap();
 
         let game = KPlusSolitaire::with_deck(d);
+        let game = game.state;
         let moves = generate_moves(&game);
         let set: HashSet<Action> = HashSet::from_iter(moves.into_iter());
         let required = [

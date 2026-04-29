@@ -3,10 +3,20 @@ name = "solitaire-solver"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+indexmap = "2.13.0"
+lru = "0.16.3"
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "1.0.149", optional = true }
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.solitaire-game]
 version = "0.2.0"
 path = "../solitaire-game"
 default-features = false
-features = ["kplus"]
+features = ["kplus", "serde"]
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_json"]

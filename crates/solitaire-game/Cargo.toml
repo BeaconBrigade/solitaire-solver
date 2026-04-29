@@ -9,6 +9,9 @@ edition = "2021"
 default = ["standard"]
 standard = []
 kplus = []
+serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 rand = "0.8.5"
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "1.0.149", optional = true }
