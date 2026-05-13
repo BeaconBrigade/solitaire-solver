@@ -7,7 +7,7 @@ use crate::{
 };
 
 /// Representation of Solitaire using [K+ solitaire](https://web.engr.oregonstate.edu/~afern/papers/solitaire.pdf)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct State {
     // pile.1 is the index where face up cards start
     pub tableau: [([Option<Card>; 19], u8); 7],
@@ -83,15 +83,17 @@ impl State {
                 new.talon.0[action.from.idx as usize] = None;
 
                 let mut shifted = 0;
-                if self.talon.1 >= 0 && self.talon.1 != action.from.idx as i8 {
+                // check if we have a special index (or if we had one and used up all the cards to
+                // the left)
+                if (self.talon.1 >= 0 || self.talon.3 > 0) && self.talon.1 != action.from.idx as i8
+                {
                     // if the special index is after where we shift, we need to
                     // adjust the special index to account for the shift
-                    if action.from.idx > self.talon.1 as u8 {
+                    if action.from.idx as i8 > self.talon.1 {
                         shifted = new.talon.3;
                     }
                     // rotate from the old special index to remove blanks
-                    new.talon.0[new.talon.1.max(0) as usize + 1..]
-                        .rotate_left(new.talon.3 as usize);
+                    new.talon.0[new.talon.1 as usize + 1..].rotate_left(new.talon.3 as usize);
                     new.talon.3 = 0;
                 }
                 new.talon.3 += 1;
@@ -140,7 +142,7 @@ impl State {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize],
             Location::Tableau(i) => self.tableau[i as usize].0[pos.idx as usize],
             // do flatten last so we actually count blank spaces in the talon
-            Location::Talon => self.talon.0.iter().nth(pos.idx as usize).copied().flatten(),
+            Location::Talon => self.talon.0.get(pos.idx as usize).copied().flatten(),
         }
     }
 
@@ -301,10 +303,73 @@ impl State {
 
         None
     }
+
+    /// Checks if the game is won
+    ///
+    /// Is pretty lazy and just checks the last card in the foundation is full
+    pub fn is_win(&self) -> bool {
+        self.foundation[0][12].is_some()
+            && self.foundation[1][12].is_some()
+            && self.foundation[2][12].is_some()
+            && self.foundation[3][12].is_some()
+    }
 }
 
 impl Default for State {
     fn default() -> Self {
         Self::new(Deck::new_shuffled())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::{
+        common::{Coord, Location},
+        deck::Deck,
+        kplus::{Action, KPlusSolitaire},
+    };
+
+    macro_rules! ta {
+        ($i:expr) => {
+            Coord::new(Location::Talon, $i as u8)
+        };
+    }
+
+    macro_rules! tb {
+        ($p:expr, $i:expr) => {
+            Coord::new(Location::Tableau($p as u8), $i as u8)
+        };
+    }
+
+    macro_rules! fd {
+        ($p:expr, $i:expr) => {
+            Coord::new(Location::Foundation($p as u8), $i as u8)
+        };
+    }
+
+    macro_rules! a {
+        ($f:expr, $t:expr) => {
+            Action::new($f, $t)
+        };
+    }
+
+    #[test]
+    fn clear_front() {
+        let d = Deck::from_str(
+            "Spades Six\nClubs Five\nHearts Four\nHearts Ten\nSpades Four\nDiamonds Eight\nSpades Eight\nClubs Nine\nHearts Three\nClubs King\nSpades Three\nDiamonds Jack\nClubs Six\nClubs Two\nClubs Ace\nHearts Six\nDiamonds King\nHearts Queen\nHearts Eight\nDiamonds Three\nClubs Four\nDiamonds Ten\nHearts Five\nClubs Jack\nSpades Jack\nDiamonds Ace\nSpades King\nHearts Nine\nSpades Two\nSpades Ace\nHearts Ace\nHearts King\nDiamonds Four\nDiamonds Five\nSpades Ten\nHearts Seven\nClubs Three\nClubs Eight\nSpades Queen\nDiamonds Seven\nClubs Ten\nDiamonds Nine\nSpades Seven\nDiamonds Six\nClubs Seven\nDiamonds Queen\nDiamonds Two\nSpades Five\nClubs Queen\nHearts Jack\nSpades Nine\nHearts Two\n"
+        ).unwrap();
+        let mut game = KPlusSolitaire::with_deck(d);
+        game.do_move(a!(ta!(2), fd!(0, 0)));
+        game.do_move(a!(tb!(4, 4), fd!(1, 0)));
+        game.do_move(a!(tb!(4, 3), fd!(1, 1)));
+        game.do_move(a!(ta!(1), fd!(2, 0)));
+        game.do_move(a!(ta!(0), fd!(2, 1)));
+        game.do_move(a!(ta!(23), fd!(0, 1)));
+        // this shouldn't crash things
+        game.do_move(a!(ta!(5), tb!(0, 1)));
+        // just for no reason
+        assert_eq!(game.state.is_win(), false);
     }
 }
