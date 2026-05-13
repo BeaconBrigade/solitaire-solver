@@ -24,11 +24,11 @@ The script then reports successes/failures and some summary stats on those (time
 
 ## Profiling
 
-You can also profile the program using `cargo-flamegraph` with e.g.:
+You can also profile the program using [`samply`](https://crates.io/crates/samply) with e.g.:
 
 ```shell
 # run in crates/solitaire-solver to test the solver using the nested method on decks/t shuffling
-cargo flamegraph --bin=cli -- solve nested ../../decks/t -j 2
+samply record ../../target/release/cli solve nested ../../decks/t -j 2
 ```
 
 The `profile.tar.gz` that are generated are already in the `.gitignore`.
