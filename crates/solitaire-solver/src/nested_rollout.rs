@@ -3,9 +3,9 @@ use std::{collections::HashMap, num::NonZeroUsize};
 use lru::LruCache;
 use solitaire_game::kplus::{state::State, KPlusSolitaire};
 
-use crate::{greedy::greedy, heuristic::h_greed, move_generation::generate_moves, Eval, Solution};
+use crate::{Eval, Solution, greedy::greedy, heuristic::h2, move_generation::generate_moves};
 
-/// Implements nested rollouts using h_greed, n is the level of nesting to use
+/// Implements nested rollouts using h2, n is the level of nesting to use
 pub fn nested_rollout_solve(mut game: KPlusSolitaire, n: usize) -> Option<Solution> {
     if game.state.is_win() {
         return Some(Solution { moves: Vec::new() });
@@ -21,7 +21,7 @@ pub fn nested_rollout_solve(mut game: KPlusSolitaire, n: usize) -> Option<Soluti
     let mut caches = caches.iter_mut().collect::<Vec<&mut _>>();
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (Eval::Loss, None);
-        root_path.insert(game.state, n);
+        root_path.insert(game.state, (0, n));
         for a in actions {
             let next = game.state.apply(a);
             // don't revisit nodes
@@ -59,30 +59,30 @@ fn nested_rollout(
     mut state: State,
     caches: &mut [&mut LruCache<State, ()>],
     n: usize,
-    mut root_path: HashMap<State, usize>,
+    mut root_path: HashMap<State, (usize, usize)>,
 ) -> Eval {
     if state.is_win() {
         return Eval::Win(Vec::new());
-    } else if root_path.get(&state).copied() == Some(n) {
+    } else if root_path.get(&state).copied() == Some((0, n)) {
         // we're in an infinite loop
         return Eval::Loss;
     }
 
     // we've already evaluated this position
     if n > 0 && caches[0].get(&state).is_some() {
-        return Eval::H(h_greed(&state));
+        return Eval::H(h2(&state));
     }
 
     let mut actions = generate_moves(&state);
     let mut moves = Vec::new();
 
     while !state.is_win() && !actions.is_empty() {
-        root_path.insert(state, n);
+        root_path.insert(state, (0, n));
         let mut max = (Eval::Loss, None);
         for a in actions {
             let next = state.apply(a);
             let eval = if n == 0 {
-                greedy(next, root_path.clone())
+                greedy(next, root_path.clone(), &h2)
             } else {
                 nested_rollout(next, &mut caches[1..], n - 1, root_path.clone())
             };
@@ -99,7 +99,7 @@ fn nested_rollout(
                 moves.append(&mut actions);
                 return Eval::Win(moves);
             }
-            (Eval::Loss, None) => return Eval::H(h_greed(&state)),
+            (Eval::Loss, None) => return Eval::H(h2(&state)),
             (Eval::Loss, Some(_)) => {}
             (Eval::H(_), _) => {}
         }
@@ -111,5 +111,5 @@ fn nested_rollout(
         actions = generate_moves(&state);
     }
 
-    Eval::H(h_greed(&state))
+    Eval::H(h2(&state))
 }

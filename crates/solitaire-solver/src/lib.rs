@@ -12,6 +12,7 @@ use solitaire_game::kplus::action::Action;
 pub mod greedy;
 pub mod heuristic;
 pub mod move_generation;
+pub mod multistage_nested_rollout;
 pub mod nested_rollout;
 
 #[derive(Debug)]
@@ -20,7 +21,7 @@ pub struct Solution {
     pub moves: Vec<Action>,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Eval {
     Win(Vec<Action>),
     Loss,

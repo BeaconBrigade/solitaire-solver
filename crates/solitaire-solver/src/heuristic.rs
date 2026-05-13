@@ -1,7 +1,9 @@
 use solitaire_game::{common::Location, deck::Card, kplus::state::State};
 
-/// h0 from Bjarnason 2007 table 1
-pub fn h0(state: &State) -> isize {
+use crate::move_generation::generate_moves;
+
+/// h1 from Bjarnason 2007 table 1
+pub fn h1(state: &State) -> isize {
     let mut h = 0;
     // number 1
     for pile in state.foundation {
@@ -24,7 +26,7 @@ pub fn h0(state: &State) -> isize {
                 }
             }
             // number 5 and 6
-            h += h0_block_score(state, card, p, idx);
+            h += h1_block_score(state, card, p, idx);
         }
     }
     // number 3 is irrelevant here
@@ -32,7 +34,7 @@ pub fn h0(state: &State) -> isize {
     h
 }
 
-fn h0_block_score(state: &State, card: Card, pile: usize, idx: usize) -> isize {
+fn h1_block_score(state: &State, card: Card, pile: usize, idx: usize) -> isize {
     let mut h = 0;
     let build_cards = card.build_cards();
     for under in state.tableau[pile].0[..idx].iter().flatten() {
@@ -50,13 +52,26 @@ fn h0_block_score(state: &State, card: Card, pile: usize, idx: usize) -> isize {
     h
 }
 
-/// Some weird combination of h0 and h1 in hopes of being better for greedy
-pub fn h_greed(state: &State) -> isize {
+/// h2 from Bjarnason 2007 table 1
+pub fn h2(state: &State) -> isize {
     let mut h = 0;
     // number 1
     for pile in state.foundation {
         for _ in pile.iter().flatten() {
             h += 5;
+        }
+    }
+
+    let mut seen = [None; 24];
+    let mut s_idx = -1;
+    for action in generate_moves(state) {
+        let from = state.get(action.from);
+        if action.from.location == Location::Talon && !seen.contains(&Some(from)) {
+            // number 3
+            h += 1;
+            // make sure to count each card only once
+            seen[(s_idx + 1) as usize] = Some(from);
+            s_idx += 1;
         }
     }
 
@@ -70,35 +85,29 @@ pub fn h_greed(state: &State) -> isize {
             let pair = state.get_coord(card.colour_pair()).unwrap();
             if let Location::Tableau(p) = pair.location {
                 if pair.idx < state.tableau[p as usize].1 {
-                    h -= 3;
+                    h -= 1;
                 }
             }
             // number 5 and 6
-            h += h_greed_block_score(state, card, p, idx);
-        }
-    }
-    // number 3 is irrelevant here
-    for (i, card) in state.talon.0.iter().enumerate() {
-        if card.is_some() && state.is_reachable_talon(i as u8) {
-            h += 1
+            h += h2_block_score(state, card, p, idx);
         }
     }
 
     h
 }
 
-fn h_greed_block_score(state: &State, card: Card, pile: usize, idx: usize) -> isize {
+fn h2_block_score(state: &State, card: Card, pile: usize, idx: usize) -> isize {
     let mut h = 0;
     let build_cards = card.build_cards();
     for under in state.tableau[pile].0[..idx].iter().flatten() {
         if under.suit == card.suit && under.value < card.value {
             // number 5
-            h -= 3;
+            h -= 1;
         }
         if let Some((first, second)) = build_cards {
             if *under == first || *under == second {
                 // number 6
-                h -= 8;
+                h -= 5;
             }
         }
     }

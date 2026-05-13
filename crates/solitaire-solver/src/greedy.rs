@@ -3,7 +3,11 @@ use std::{collections::HashMap, num::NonZeroUsize};
 use lru::LruCache;
 use solitaire_game::kplus::{state::State, KPlusSolitaire};
 
-use crate::{heuristic::h_greed, move_generation::generate_moves, Eval, Solution};
+use crate::{
+    heuristic::h2,
+    move_generation::generate_moves,
+    Eval, Solution,
+};
 
 pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     let mut moves = Vec::new();
@@ -13,14 +17,14 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     let mut cache = LruCache::new(NonZeroUsize::new(50_000).unwrap());
     while !game.state.is_win() && !actions.is_empty() {
         let mut max = (isize::MIN, None);
-        root_path.insert(game.state, 0);
+        root_path.insert(game.state, (0, 0));
         for a in actions {
             let n = game.state.apply(a);
             // don't revisit nodes
             if cache.get(&n).is_some() {
                 continue;
             }
-            let eval = greedy(n, root_path.clone());
+            let eval = greedy(n, root_path.clone(), &h2);
             let h = match eval {
                 Eval::Loss => continue,
                 Eval::Win(mut rest_of_moves) => {
@@ -49,7 +53,11 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
     }
 }
 
-pub fn greedy(mut state: State, mut root_path: HashMap<State, usize>) -> Eval {
+pub fn greedy(
+    mut state: State,
+    mut root_path: HashMap<State, (usize, usize)>,
+    heuristic: &dyn Fn(&State) -> isize,
+) -> Eval {
     let mut moves = Vec::new();
     let mut actions = generate_moves(&state);
     while !state.is_win() && !actions.is_empty() {
@@ -57,7 +65,7 @@ pub fn greedy(mut state: State, mut root_path: HashMap<State, usize>) -> Eval {
         if root_path.contains_key(&state) {
             return Eval::Loss;
         }
-        root_path.insert(state, 0);
+        root_path.insert(state, (0, 0));
         let mut max = (isize::MIN, None);
         for a in actions {
             let n = state.apply(a);
@@ -65,7 +73,7 @@ pub fn greedy(mut state: State, mut root_path: HashMap<State, usize>) -> Eval {
             if root_path.contains_key(&n) {
                 continue;
             }
-            let h = h_greed(&n);
+            let h = heuristic(&n);
             if max.0 < h {
                 max = (h, Some(a));
             }
@@ -82,6 +90,6 @@ pub fn greedy(mut state: State, mut root_path: HashMap<State, usize>) -> Eval {
     if state.is_win() {
         Eval::Win(moves)
     } else {
-        Eval::H(h_greed(&state))
+        Eval::H(h2(&state))
     }
 }

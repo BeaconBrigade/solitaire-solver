@@ -8,7 +8,13 @@ use std::{
 };
 
 use solitaire_game::{deck::Deck, kplus::KPlusSolitaire};
-use solitaire_solver::{greedy::greedy_solve, nested_rollout::nested_rollout_solve, Solution};
+use solitaire_solver::{
+    greedy::greedy_solve,
+    heuristic::{h1, h2},
+    multistage_nested_rollout::multistage_rollout_solve,
+    nested_rollout::nested_rollout_solve,
+    Solution,
+};
 
 fn main() {
     let mut args = env::args();
@@ -45,7 +51,11 @@ fn main() {
                 if json {
                     arg = args.next();
                 }
-                n = arg.as_deref().and_then(|s| usize::from_str(s).ok());
+                n = arg.as_deref().and_then(|s| {
+                    s.split(',')
+                        .map(|s| usize::from_str(s).ok())
+                        .collect::<Option<Vec<usize>>>()
+                });
             }
             solve(buf, method, json, n);
         }
@@ -108,7 +118,7 @@ fn main() {
     }
 }
 
-fn solve(deck: String, method: String, json: bool, n: Option<usize>) {
+fn solve(deck: String, method: String, json: bool, n: Option<Vec<usize>>) {
     let game = KPlusSolitaire::with_deck(Deck::from_str(&deck).unwrap());
 
     let (now, sol) = match method.to_lowercase().as_str() {
@@ -118,7 +128,18 @@ fn solve(deck: String, method: String, json: bool, n: Option<usize>) {
         }
         "nested" => {
             let now = Instant::now();
-            (now, nested_rollout_solve(game, n.unwrap_or(2)))
+            (now, nested_rollout_solve(game, n.unwrap_or(vec![2])[0]))
+        }
+        "multistage" => {
+            let now = Instant::now();
+            (
+                now,
+                multistage_rollout_solve(
+                    game,
+                    &n.map(|n| [n[0], n[1]]).unwrap_or([2, 1]),
+                    &[&h1, &h2],
+                ),
+            )
         }
         _ => {
             print_method_not_found();
@@ -175,8 +196,8 @@ fn print_help() {
     println!();
     println!("Available commands:");
     println!("\tsolve <method> <path> [-j | --json] [n]: solve a puzzle located at <path> using <method> (use - for stdin) use -j for json structured output");
-    println!("\t\tavailable methods: greedy, nested");
-    println!("\t\tn: level of nesting for applicable solvers");
+    println!("\t\tavailable methods: greedy, nested, multistage");
+    println!("\t\tn: level of nesting for applicable solvers (comma separated list of length two for multistage)");
     println!("\tverify <path> <solution-path>: apply moves from to a state and verify if they solve the puzzle");
     println!("\trandom: generate a random deck seed");
     println!("\thelp: print out this help message");
@@ -205,7 +226,7 @@ fn print_method_not_found() {
         env::args().next().unwrap()
     );
     println!("error: method is missing");
-    println!("available methods: greedy, nested");
+    println!("available methods: greedy, nested, multistage");
 }
 
 fn print_path_not_found(path: &str) {

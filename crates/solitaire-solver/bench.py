@@ -45,6 +45,30 @@ def summarize(times):
     }
 
 
+def summarize_lengths(values):
+    if len(values) == 0:
+        return {}
+
+    arr = np.array(values)
+    mean = float(np.mean(arr))
+    std = float(np.std(arr))
+
+    margin = 1.96 * std / math.sqrt(len(arr))
+
+    return {
+        "count": len(arr),
+        "mean": mean,
+        "std": std,
+        "min": float(np.min(arr)),
+        "max": float(np.max(arr)),
+        "median": float(np.median(arr)),
+        "95%_ci": (
+            mean - margin,
+            mean + margin
+        )
+    }
+
+
 def build_binary():
     print("Building latest release binary...")
     subprocess.run(["cargo", "build", "--release"], check=True)
@@ -133,10 +157,10 @@ def main():
         prog="bench",
         description="bench the solitaire solvers"
     )
-    parser.add_argument("--method", default="nested")
+    parser.add_argument("--method", default="multistage")
     parser.add_argument("--iterations", type=int, default=1000)
     parser.add_argument("--jobs", type=int, default=8)
-    parser.add_argument("--nest", type=int, default=2)
+    parser.add_argument("--nest")
     parser.add_argument("--timeout", type=int, default=600, help="pass 0 for no timeout (seconds)")
 
     args = parser.parse_args()
@@ -154,6 +178,7 @@ def main():
     all_times = []
     success_times = []
     failure_times = []
+    solution_lengths = []
 
     print("Running solver...")
     with ThreadPoolExecutor(max_workers=args.jobs) as executor:
@@ -171,6 +196,7 @@ def main():
                     successes += 1
                     all_times.append(t)
                     success_times.append(t)
+                    solution_lengths.append(len(actions["moves"]))
 
                     valid, err = verify_solution(seed, actions)
 
@@ -232,6 +258,11 @@ def main():
 
     print("failure time stats:")
     print(summarize(failure_times))
+    print()
+
+    print("solution length stats:")
+    length_stats = summarize_lengths(solution_lengths)
+    print(length_stats)
 
 
 if __name__ == "__main__":
