@@ -1,9 +1,11 @@
-use solitaire_game::{common::Location, deck::Card, kplus::state::State};
-
-use crate::move_generation::generate_moves;
+use solitaire_game::{
+    common::Location,
+    deck::Card,
+    kplus::{action::Action, state::State},
+};
 
 /// h1 from Bjarnason 2007 table 1
-pub fn h1(state: &State) -> isize {
+pub fn h1(state: &State, _moves: &[Action]) -> isize {
     let mut h = 0;
     // number 1
     for pile in state.foundation {
@@ -53,7 +55,7 @@ fn h1_block_score(state: &State, card: Card, pile: usize, idx: usize) -> isize {
 }
 
 /// h2 from Bjarnason 2007 table 1
-pub fn h2(state: &State) -> isize {
+pub fn h2(state: &State, moves: &[Action]) -> isize {
     let mut h = 0;
     // number 1
     for pile in state.foundation {
@@ -64,7 +66,7 @@ pub fn h2(state: &State) -> isize {
 
     let mut seen = [None; 24];
     let mut s_idx = -1;
-    for action in generate_moves(state) {
+    for action in moves {
         let from = state.get(action.from);
         if action.from.location == Location::Talon && !seen.contains(&Some(from)) {
             // number 3

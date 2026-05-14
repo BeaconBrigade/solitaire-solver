@@ -1,7 +1,7 @@
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use lru::LruCache;
-use solitaire_game::kplus::{state::State, KPlusSolitaire};
+use solitaire_game::kplus::{KPlusSolitaire, action::Action, state::State};
 
 use crate::{
     heuristic::h2,
@@ -56,7 +56,7 @@ pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
 pub fn greedy(
     mut state: State,
     mut root_path: HashMap<State, (usize, usize)>,
-    heuristic: &dyn Fn(&State) -> isize,
+    heuristic: &dyn Fn(&State, &[Action]) -> isize,
 ) -> Eval {
     let mut moves = Vec::new();
     let mut actions = generate_moves(&state);
@@ -67,13 +67,13 @@ pub fn greedy(
         }
         root_path.insert(state, (0, 0));
         let mut max = (isize::MIN, None);
-        for a in actions {
-            let n = state.apply(a);
+        for a in &actions {
+            let n = state.apply(*a);
             // we've already visited this node, so we're in a loop
             if root_path.contains_key(&n) {
                 continue;
             }
-            let h = heuristic(&n);
+            let h = heuristic(&n, &actions);
             if max.0 < h {
                 max = (h, Some(a));
             }
@@ -83,13 +83,13 @@ pub fn greedy(
         let Some(a) = max.1 else {
             return Eval::Loss;
         };
-        moves.push(a);
-        state = state.apply(a);
+        moves.push(*a);
+        state = state.apply(*a);
         actions = generate_moves(&state);
     }
     if state.is_win() {
         Eval::Win(moves)
     } else {
-        Eval::H(h2(&state))
+        Eval::H(h2(&state, &generate_moves(&state)))
     }
 }

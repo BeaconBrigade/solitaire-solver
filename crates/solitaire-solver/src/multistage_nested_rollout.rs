@@ -1,7 +1,7 @@
 use std::{array, collections::HashMap, num::NonZeroUsize};
 
 use lru::LruCache;
-use solitaire_game::kplus::{state::State, KPlusSolitaire};
+use solitaire_game::kplus::{KPlusSolitaire, action::Action, state::State};
 
 use crate::{Eval, Solution, greedy::greedy, move_generation::generate_moves};
 
@@ -12,7 +12,7 @@ use crate::{Eval, Solution, greedy::greedy, move_generation::generate_moves};
 pub fn multistage_rollout_solve<const H: usize>(
     mut game: KPlusSolitaire,
     n: &[usize; H],
-    heuristics: &[&dyn Fn(&State) -> isize; H],
+    heuristics: &[&dyn Fn(&State, &[Action]) -> isize; H],
 ) -> Option<Solution> {
     if game.state.is_win() {
         return Some(Solution { moves: Vec::new() });
@@ -88,7 +88,7 @@ fn multistage_nested_rollout(
     stage: usize,
     caches: &mut [&mut Vec<LruCache<State, ()>>],
     n: Vec<usize>,
-    heuristics: &[&dyn Fn(&State) -> isize],
+    heuristics: &[&dyn Fn(&State, &[Action]) -> isize],
     // has (stage, n) pair
     mut root_path: HashMap<State, (usize, usize)>,
 ) -> Eval {
@@ -102,7 +102,7 @@ fn multistage_nested_rollout(
 
     let mut actions = generate_moves(&state);
     if actions.is_empty() {
-        return Eval::H(heuristics[0](&state));
+        return Eval::H(heuristics[0](&state, &actions));
     }
     let mut moves = Vec::new();
 
@@ -115,7 +115,7 @@ fn multistage_nested_rollout(
     if n[0] != usize::MAX && caches[0][n[0] - 1].contains(&state) {
         // if this is the last heuristic
         if n.len() == 1 {
-            return Eval::H(heuristics[0](&state));
+            return Eval::H(heuristics[0](&state, &actions));
         } else {
             return multistage_nested_rollout(
                 state,
@@ -130,12 +130,12 @@ fn multistage_nested_rollout(
 
     let result = loop {
         if !state.is_win() && actions.is_empty() {
-            break Eval::H(heuristics[0](&state));
+            break Eval::H(heuristics[0](&state, &actions));
         }
         root_path.insert(state, (stage, n[0]));
         let mut max = (Eval::Loss, None);
-        for a in actions {
-            let next = state.apply(a);
+        for a in &actions {
+            let next = state.apply(*a);
             let mut q = n.clone();
             q[0] -= 1;
             let eval =
@@ -143,7 +143,7 @@ fn multistage_nested_rollout(
             // use the 'or' so if there's at least one move even if it results
             // in a loss, it is stored there
             if max.0 < eval || max.0 == Eval::Loss {
-                max = (eval, Some(a));
+                max = (eval, Some(*a));
             }
         }
         match max {
@@ -156,7 +156,7 @@ fn multistage_nested_rollout(
             (Eval::Loss, _) => {
                 // last heuristic
                 if n.len() == 1 {
-                    break Eval::H(heuristics[0](&state));
+                    break Eval::H(heuristics[0](&state, &actions));
                 } else {
                     break multistage_nested_rollout(
                         state,
@@ -169,7 +169,7 @@ fn multistage_nested_rollout(
                 }
             }
             // same as before, this is for local minimums
-            (Eval::H(h), _) if n.len() > 1 && h < heuristics[0](&state) => {
+            (Eval::H(h), _) if n.len() > 1 && h < heuristics[0](&state, &actions) => {
                 break multistage_nested_rollout(
                     state,
                     stage + 1,

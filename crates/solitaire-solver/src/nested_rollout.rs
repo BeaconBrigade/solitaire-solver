@@ -70,7 +70,7 @@ fn nested_rollout(
 
     // we've already evaluated this position
     if n > 0 && caches[0].get(&state).is_some() {
-        return Eval::H(h2(&state));
+        return Eval::H(h2(&state, &generate_moves(&state)));
     }
 
     let mut actions = generate_moves(&state);
@@ -79,8 +79,8 @@ fn nested_rollout(
     while !state.is_win() && !actions.is_empty() {
         root_path.insert(state, (0, n));
         let mut max = (Eval::Loss, None);
-        for a in actions {
-            let next = state.apply(a);
+        for a in &actions {
+            let next = state.apply(*a);
             let eval = if n == 0 {
                 greedy(next, root_path.clone(), &h2)
             } else {
@@ -90,7 +90,7 @@ fn nested_rollout(
             // use the 'or' so if there's at least one move even if it results
             // in a loss, it is stored there
             if max.0 < eval || max.0 == Eval::Loss {
-                max = (eval, Some(a));
+                max = (eval, Some(*a));
             }
         }
         match max {
@@ -99,7 +99,7 @@ fn nested_rollout(
                 moves.append(&mut actions);
                 return Eval::Win(moves);
             }
-            (Eval::Loss, None) => return Eval::H(h2(&state)),
+            (Eval::Loss, None) => return Eval::H(h2(&state, &actions)),
             (Eval::Loss, Some(_)) => {}
             (Eval::H(_), _) => {}
         }
@@ -111,5 +111,5 @@ fn nested_rollout(
         actions = generate_moves(&state);
     }
 
-    Eval::H(h2(&state))
+    Eval::H(h2(&state, &actions))
 }
