@@ -8,6 +8,7 @@ use solitaire_game::{
 };
 
 pub fn generate_moves(state: &State) -> Vec<Action> {
+    // TODO: make this function take an existing vec, to remove reallocations
     // for each available card in the talon we need to check:
     // - can it move to any column in the foundation (max 1)
     // - can it move to any column in the tableau

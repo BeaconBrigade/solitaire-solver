@@ -1,95 +1,91 @@
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use lru::LruCache;
-use solitaire_game::kplus::{KPlusSolitaire, action::Action, state::State};
+use solitaire_game::kplus::{action::Action, state::State};
 
-use crate::{
-    heuristic::h2,
-    move_generation::generate_moves,
-    Eval, Solution,
-};
+use crate::{heuristic::h2, move_generation::generate_moves, Eval, Solver};
 
-pub fn greedy_solve(mut game: KPlusSolitaire) -> Option<Solution> {
-    let mut moves = Vec::new();
-    let mut actions = generate_moves(&game.state);
-    let mut root_path = HashMap::new();
-    // every heuristic level needs its own cache
-    let mut cache = LruCache::new(NonZeroUsize::new(50_000).unwrap());
-    while !game.state.is_win() && !actions.is_empty() {
-        let mut max = (isize::MIN, None);
-        root_path.insert(game.state, (0, 0));
-        for a in actions {
-            let n = game.state.apply(a);
-            // don't revisit nodes
-            if cache.get(&n).is_some() {
-                continue;
-            }
-            let eval = greedy(n, root_path.clone(), &h2);
-            let h = match eval {
-                Eval::Loss => continue,
-                Eval::Win(mut rest_of_moves) => {
-                    moves.push(a);
-                    moves.append(&mut rest_of_moves);
-                    return Some(Solution { moves });
-                }
-                Eval::H(h) => h,
-            };
-            cache.put(n, ());
-            if max.0 < h {
-                max = (h, Some(a));
-            }
-        }
-        // we've hit a dead end and are just going in circles
-        let a = max.1?;
-        game.do_move(a);
-        moves.push(a);
-        actions = generate_moves(&game.state);
-    }
+pub struct GreedySolver {
+    cache: LruCache<State, isize>,
+}
 
-    if game.state.is_win() {
-        Some(Solution { moves })
-    } else {
-        None
+impl GreedySolver {
+    pub fn new(capacity: usize) -> Self {
+        Self { cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()) }
     }
 }
 
-pub fn greedy(
-    mut state: State,
-    mut root_path: HashMap<State, (usize, usize)>,
-    heuristic: &dyn Fn(&State, &[Action]) -> isize,
-) -> Eval {
-    let mut moves = Vec::new();
-    let mut actions = generate_moves(&state);
-    while !state.is_win() && !actions.is_empty() {
-        // loop prevention
-        if root_path.contains_key(&state) {
-            return Eval::Loss;
-        }
-        root_path.insert(state, (0, 0));
+impl Default for GreedySolver {
+    fn default() -> Self {
+        Self::new(50_000)
+    }
+}
+
+impl Solver for GreedySolver {
+    fn next_move(
+        &mut self,
+        root_path: &HashMap<State, ()>,
+        state: &State,
+        actions: &Vec<Action>,
+    ) -> Option<Action> {
         let mut max = (isize::MIN, None);
-        for a in &actions {
-            let n = state.apply(*a);
-            // we've already visited this node, so we're in a loop
-            if root_path.contains_key(&n) {
+        for a in actions {
+            let new = state.apply(*a);
+            // already been to this state in our path
+            if root_path.contains_key(&new) {
                 continue;
             }
-            let h = heuristic(&n, &actions);
-            if max.0 < h {
-                max = (h, Some(a));
+            let h = if let Some(h) = self.cache.get(&new) { *h } else {
+                let eval = greedy_eval(root_path.clone(), new);
+                match eval {
+                    Eval::Loss => {
+                        isize::MIN + 1
+                    }
+                    Eval::Win => {
+                        isize::MAX
+                    }
+                    Eval::H(h) => h,
+                }
+            };
+
+            self.cache.put(new, h);
+            if h > max.0 {
+                max = (h, Some(*a));
             }
         }
-        // every action takes us back somewhere we've been, it's a dead end
-        // or we are just researching here which is bad
-        let Some(a) = max.1 else {
-            return Eval::Loss;
-        };
-        moves.push(*a);
-        state = state.apply(*a);
+
+        max.1
+    }
+}
+
+fn greedy_eval(mut root_path: HashMap<State, ()>, mut state: State) -> Eval {
+    // don't waste an allocation
+    let mut actions = Vec::with_capacity(0);
+    while !state.is_win() {
+        root_path.insert(state, ());
+
+        let mut max = (isize::MIN, None);
         actions = generate_moves(&state);
+        for a in &actions {
+            let new = state.apply(*a);
+            // we're repeating states
+            if root_path.contains_key(&new) {
+                continue;
+            }
+            let candidate_moves = generate_moves(&new);
+
+            let h = h2(&new, &candidate_moves);
+            if h > max.0 {
+                max = (h, Some(new));
+            }
+        }
+        if let (_, Some(new)) = max {
+            state = new;
+        } else {
+            // we ran out of unexplored moves
+            return Eval::Loss;
+        }
     }
-    if state.is_win() {
-        Eval::Win(moves)
-    } else {
-        Eval::H(h2(&state, &generate_moves(&state)))
-    }
+    // whether we won, or ran out of moves, return h2
+    Eval::H(h2(&state, &actions))
 }
