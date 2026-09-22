@@ -11,7 +11,41 @@ pub struct GreedySolver {
 
 impl GreedySolver {
     pub fn new(capacity: usize) -> Self {
-        Self { cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()) }
+        Self {
+            cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
+        }
+    }
+
+    pub fn eval(&self, mut root_path: HashMap<State, ()>, mut state: State) -> Eval {
+        // don't waste an allocation
+        let mut actions = Vec::with_capacity(0);
+        while !state.is_win() {
+            root_path.insert(state, ());
+
+            let mut max = (isize::MIN, None);
+            actions = generate_moves(&state);
+            for a in &actions {
+                let new = state.apply(*a);
+                // we're repeating states
+                if root_path.contains_key(&new) {
+                    continue;
+                }
+                let candidate_moves = generate_moves(&new);
+
+                let h = h2(&new, &candidate_moves);
+                if h > max.0 {
+                    max = (h, Some(new));
+                }
+            }
+            if let (_, Some(new)) = max {
+                state = new;
+            } else {
+                // we ran out of unexplored moves
+                return Eval::Loss;
+            }
+        }
+        // whether we won, or ran out of moves, return h2
+        Eval::H(h2(&state, &actions))
     }
 }
 
@@ -35,15 +69,13 @@ impl Solver for GreedySolver {
             if root_path.contains_key(&new) {
                 continue;
             }
-            let h = if let Some(h) = self.cache.get(&new) { *h } else {
-                let eval = greedy_eval(root_path.clone(), new);
+            let h = if let Some(h) = self.cache.get(&new) {
+                *h
+            } else {
+                let eval = self.eval(root_path.clone(), new);
                 match eval {
-                    Eval::Loss => {
-                        isize::MIN + 1
-                    }
-                    Eval::Win => {
-                        isize::MAX
-                    }
+                    Eval::Loss => isize::MIN + 1,
+                    Eval::Win => isize::MAX,
                     Eval::H(h) => h,
                 }
             };
@@ -56,36 +88,4 @@ impl Solver for GreedySolver {
 
         max.1
     }
-}
-
-fn greedy_eval(mut root_path: HashMap<State, ()>, mut state: State) -> Eval {
-    // don't waste an allocation
-    let mut actions = Vec::with_capacity(0);
-    while !state.is_win() {
-        root_path.insert(state, ());
-
-        let mut max = (isize::MIN, None);
-        actions = generate_moves(&state);
-        for a in &actions {
-            let new = state.apply(*a);
-            // we're repeating states
-            if root_path.contains_key(&new) {
-                continue;
-            }
-            let candidate_moves = generate_moves(&new);
-
-            let h = h2(&new, &candidate_moves);
-            if h > max.0 {
-                max = (h, Some(new));
-            }
-        }
-        if let (_, Some(new)) = max {
-            state = new;
-        } else {
-            // we ran out of unexplored moves
-            return Eval::Loss;
-        }
-    }
-    // whether we won, or ran out of moves, return h2
-    Eval::H(h2(&state, &actions))
 }

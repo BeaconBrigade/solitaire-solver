@@ -1,115 +1,99 @@
 use std::{collections::HashMap, num::NonZeroUsize};
 
 use lru::LruCache;
-use solitaire_game::kplus::{state::State, KPlusSolitaire};
+use solitaire_game::kplus::{action::Action, state::State};
 
-use crate::{Eval, Solution, greedy::greedy, heuristic::h2, move_generation::generate_moves};
+use crate::{greedy::GreedySolver, heuristic::h2, move_generation::generate_moves, Eval, Solver};
 
-/// Implements nested rollouts using h2, n is the level of nesting to use
-pub fn nested_rollout_solve(mut game: KPlusSolitaire, n: usize) -> Option<Solution> {
-    if game.state.is_win() {
-        return Some(Solution { moves: Vec::new() });
+pub struct NestedRolloutSolver {
+    caches: Vec<LruCache<State, Eval>>,
+    depth: usize,
+}
+
+impl NestedRolloutSolver {
+    pub fn new(capacity: usize, depth: usize) -> Self {
+        Self {
+            caches: Vec::from_iter(
+                std::iter::repeat_with(|| LruCache::new(NonZeroUsize::new(capacity).unwrap()))
+                    .take(depth),
+            ),
+            depth,
+        }
     }
-    let mut moves = Vec::new();
-    let mut actions = generate_moves(&game.state);
-    let mut caches = Vec::new();
-    let mut root_path = HashMap::new();
-    // extra cache for this outer level + n for the nested levels
-    for _ in 0..=n {
-        caches.push(LruCache::new(NonZeroUsize::new(50_000).unwrap()));
-    }
-    let mut caches = caches.iter_mut().collect::<Vec<&mut _>>();
-    while !game.state.is_win() && !actions.is_empty() {
-        let mut max = (Eval::Loss, None);
-        root_path.insert(game.state, (0, n));
-        for a in actions {
-            let next = game.state.apply(a);
-            // don't revisit nodes
-            if caches[0].get(&next).is_some() {
-                continue;
+
+    pub fn eval(&mut self, mut root_path: HashMap<State, ()>, mut state: State, n: usize) -> Eval {
+        let original_state = state;
+        let mut actions = Vec::with_capacity(0);
+        while !state.is_win() {
+            root_path.insert(state, ());
+
+            actions = generate_moves(&state);
+            let mut max = (Eval::Loss, None);
+            for a in &actions {
+                let new = state.apply(*a);
+                // we're repeating states
+                if root_path.contains_key(&new) {
+                    continue;
+                }
+                let eval = if n >= self.depth {
+                    // fall back to greedy eval on the last level
+                    GreedySolver::new(1).eval(root_path.clone(), new)
+                } else if let Some(eval) = self.caches[n].get(&new) {
+                    *eval
+                } else {
+                    self.eval(root_path.clone(), new, n + 1)
+                };
+                if eval > max.0 {
+                    max = (eval, Some(new));
+                }
             }
-            let eval = nested_rollout(next, &mut caches[1..], n, root_path.clone());
-            if max.0 < eval {
-                max = (eval, Some(a));
+            if let (_, Some(new)) = max {
+                state = new;
+            } else {
+                // we ran out of unexplored moves
+                return Eval::Loss;
             }
         }
-        match max.0 {
-            Eval::Win(mut actions) => {
-                moves.push(max.1.unwrap());
-                moves.append(&mut actions);
-                return Some(Solution { moves });
-            }
-            Eval::Loss => return None,
-            Eval::H(_) => {}
+        let eval = Eval::H(h2(&state, &actions));
+        if n < self.depth {
+            self.caches[n].put(original_state, eval);
         }
-        game.do_move(max.1.unwrap());
-        caches[0].put(game.state, ());
-        moves.push(max.1.unwrap());
-        actions = generate_moves(&game.state);
-    }
-
-    if game.state.is_win() {
-        Some(Solution { moves })
-    } else {
-        None
+        eval
     }
 }
 
-fn nested_rollout(
-    mut state: State,
-    caches: &mut [&mut LruCache<State, ()>],
-    n: usize,
-    mut root_path: HashMap<State, (usize, usize)>,
-) -> Eval {
-    if state.is_win() {
-        return Eval::Win(Vec::new());
-    } else if root_path.get(&state).copied() == Some((0, n)) {
-        // we're in an infinite loop
-        return Eval::Loss;
+impl Default for NestedRolloutSolver {
+    fn default() -> Self {
+        Self::new(50_000, 3)
     }
+}
 
-    // we've already evaluated this position
-    if n > 0 && caches[0].get(&state).is_some() {
-        return Eval::H(h2(&state, &generate_moves(&state)));
-    }
-
-    let mut actions = generate_moves(&state);
-    let mut moves = Vec::new();
-
-    while !state.is_win() && !actions.is_empty() {
-        root_path.insert(state, (0, n));
+impl Solver for NestedRolloutSolver {
+    fn next_move(
+        &mut self,
+        root_path: &HashMap<State, ()>,
+        state: &State,
+        actions: &Vec<Action>,
+    ) -> Option<Action> {
         let mut max = (Eval::Loss, None);
-        for a in &actions {
-            let next = state.apply(*a);
-            let eval = if n == 0 {
-                greedy(next, root_path.clone(), &h2)
+        for a in actions {
+            let new = state.apply(*a);
+            // already been to this state in our path
+            if root_path.contains_key(&new) {
+                continue;
+            }
+            let eval = if let Some(eval) = self.caches[0].get(&new) {
+                *eval
             } else {
-                nested_rollout(next, &mut caches[1..], n - 1, root_path.clone())
+                self.eval(root_path.clone(), new, 0)
             };
 
-            // use the 'or' so if there's at least one move even if it results
-            // in a loss, it is stored there
-            if max.0 < eval || max.0 == Eval::Loss {
+            self.caches[0].put(new, eval);
+            if eval > max.0 {
                 max = (eval, Some(*a));
             }
         }
-        match max {
-            (Eval::Win(mut actions), a) => {
-                moves.push(a.unwrap());
-                moves.append(&mut actions);
-                return Eval::Win(moves);
-            }
-            (Eval::Loss, None) => return Eval::H(h2(&state, &actions)),
-            (Eval::Loss, Some(_)) => {}
-            (Eval::H(_), _) => {}
-        }
-        if n > 0 {
-            caches[0].put(state, ());
-        }
-        state = state.apply(max.1.unwrap());
-        moves.push(max.1.unwrap());
-        actions = generate_moves(&state);
-    }
 
-    Eval::H(h2(&state, &actions))
+        max.1
+    }
 }

@@ -15,7 +15,7 @@ pub mod greedy;
 pub mod heuristic;
 pub mod move_generation;
 // pub mod multistage_nested_rollout;
-// pub mod nested_rollout;
+pub mod nested_rollout;
 
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -23,7 +23,7 @@ pub struct Solution {
     pub moves: Vec<Action>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Eval {
     Win,
     Loss,

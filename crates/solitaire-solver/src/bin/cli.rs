@@ -9,9 +9,7 @@ use std::{
 
 use solitaire_game::{deck::Deck, kplus::KPlusSolitaire};
 use solitaire_solver::{
-    greedy::GreedySolver,
-    /*heuristic::{h1, h2}, multistage_nested_rollout::multistage_rollout_solve, nested_rollout::nested_rollout_solve*/
-    Solution, Solver,
+    greedy::GreedySolver, nested_rollout::NestedRolloutSolver, Solution, Solver,
 };
 
 fn main() {
@@ -124,10 +122,13 @@ fn solve(deck: String, method: String, json: bool, n: Option<Vec<usize>>) {
             let now = Instant::now();
             (now, GreedySolver::default().play_game(game))
         }
-        // "nested" => {
-        //     let now = Instant::now();
-        //     (now, nested_rollout_solve(game, n.unwrap_or(vec![2])[0]))
-        // }
+        "nested" => {
+            let now = Instant::now();
+            (
+                now,
+                NestedRolloutSolver::new(50_000, n.unwrap_or(vec![2])[0]).play_game(game),
+            )
+        }
         // "multistage" => {
         //     let now = Instant::now();
         //     (
