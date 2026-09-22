@@ -1,18 +1,17 @@
-use std::{collections::HashMap, num::NonZeroUsize};
+use std::collections::HashMap;
 
-use lru::LruCache;
 use solitaire_game::kplus::{action::Action, state::State};
 
 use crate::{heuristic::h2, move_generation::generate_moves, Eval, Solver};
 
 pub struct GreedySolver {
-    cache: LruCache<State, isize>,
+    // cache: LruCache<State, isize>,
 }
 
 impl GreedySolver {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(_capacity: usize) -> Self {
         Self {
-            cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
+            // cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
         }
     }
 
@@ -45,7 +44,11 @@ impl GreedySolver {
             }
         }
         // whether we won, or ran out of moves, return h2
-        Eval::H(h2(&state, &actions))
+        if state.is_win() {
+            Eval::Win
+        } else {
+            Eval::H(h2(&state, &actions))
+        }
     }
 }
 
@@ -69,18 +72,18 @@ impl Solver for GreedySolver {
             if root_path.contains_key(&new) {
                 continue;
             }
-            let h = if let Some(h) = self.cache.get(&new) {
-                *h
-            } else {
-                let eval = self.eval(root_path.clone(), new);
-                match eval {
-                    Eval::Loss => isize::MIN + 1,
-                    Eval::Win => isize::MAX,
-                    Eval::H(h) => h,
-                }
+            // let h = if let Some(h) = self.cache.get(&new) {
+            //     *h
+            // } else {
+            let eval = self.eval(root_path.clone(), new);
+            let h = match eval {
+                Eval::Loss => isize::MIN + 1,
+                Eval::Win => isize::MAX,
+                Eval::H(h) => h,
             };
+            // };
 
-            self.cache.put(new, h);
+            // self.cache.put(new, h);
             if h > max.0 {
                 max = (h, Some(*a));
             }
