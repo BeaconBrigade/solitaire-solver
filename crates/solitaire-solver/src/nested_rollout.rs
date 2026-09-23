@@ -26,12 +26,11 @@ impl NestedRolloutSolver {
         mut state: State,
         depth: usize,
     ) -> Eval {
-        let mut actions = Vec::with_capacity(0);
         while !state.is_win() {
             root_path.insert(state, ());
 
             let mut max = (Eval::Loss, None);
-            actions = generate_moves(&state);
+            let actions = generate_moves(&state);
             for a in &actions {
                 let new = state.apply(*a);
                 // we're repeating states
@@ -65,7 +64,7 @@ impl NestedRolloutSolver {
         if state.is_win() {
             Eval::Win
         } else {
-            Eval::H(h2(&state, &actions))
+            Eval::H(h2(&state, &generate_moves(&state)))
         }
     }
 }

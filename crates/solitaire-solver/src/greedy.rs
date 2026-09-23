@@ -16,13 +16,11 @@ impl GreedySolver {
     }
 
     pub fn eval(&self, mut root_path: HashMap<State, ()>, mut state: State) -> Eval {
-        // don't waste an allocation
-        let mut actions = Vec::with_capacity(0);
         while !state.is_win() {
             root_path.insert(state, ());
 
             let mut max = (isize::MIN, None);
-            actions = generate_moves(&state);
+            let actions = generate_moves(&state);
             for a in &actions {
                 let new = state.apply(*a);
                 // we're repeating states
@@ -43,11 +41,10 @@ impl GreedySolver {
                 return Eval::Loss;
             }
         }
-        // whether we won, or ran out of moves, return h2
         if state.is_win() {
             Eval::Win
         } else {
-            Eval::H(h2(&state, &actions))
+            Eval::H(h2(&state, &generate_moves(&state)))
         }
     }
 }
