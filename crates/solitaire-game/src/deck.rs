@@ -53,7 +53,7 @@ impl FromStr for Deck {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Card {
     pub suit: Suit,
     pub value: Value,
@@ -126,7 +126,7 @@ impl FromStr for Card {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum Suit {
     Hearts = 0,

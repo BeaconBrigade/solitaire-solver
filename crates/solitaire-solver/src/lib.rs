@@ -67,7 +67,7 @@ pub trait Solver {
                 break;
             };
             moves.push(a);
-            game.do_move(a);
+            game.do_move_sorted(a);
         }
 
         if game.state.is_win() {

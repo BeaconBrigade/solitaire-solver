@@ -19,6 +19,11 @@ impl KPlusSolitaire {
         }
     }
 
+    /// play moves with a sorted tableau
+    pub fn do_move_sorted(&mut self, action: Action) {
+        self.state = self.state.apply_sorted(action);
+    }
+
     pub fn do_move(&mut self, action: Action) {
         self.state = self.state.apply(action);
     }

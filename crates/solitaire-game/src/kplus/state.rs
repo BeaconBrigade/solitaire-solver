@@ -137,6 +137,19 @@ impl State {
         new
     }
 
+    /// Apply move and then sort the tableau piles
+    pub fn apply_sorted(&self, action: Action) -> Self {
+        let mut new = self.apply(action);
+        new.sort_piles();
+        new
+    }
+
+    /// order the tableau piles. useful for reducing state space for solving
+    /// but not necessary for human play
+    fn sort_piles(&mut self) {
+        self.tableau.sort();
+    }
+
     pub fn get(&self, pos: Coord) -> Option<Card> {
         match pos.location {
             Location::Foundation(i) => self.foundation[i as usize][pos.idx as usize],

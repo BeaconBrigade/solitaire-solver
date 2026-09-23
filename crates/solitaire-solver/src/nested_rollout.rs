@@ -32,7 +32,7 @@ impl NestedRolloutSolver {
             let mut max = (Eval::Loss, None);
             let actions = generate_moves(&state);
             for a in &actions {
-                let new = state.apply(*a);
+                let new = state.apply_sorted(*a);
                 // we're repeating states
                 if root_path.contains_key(&new) {
                     continue;
@@ -84,7 +84,7 @@ impl Solver for NestedRolloutSolver {
     ) -> Option<Action> {
         let mut max = (Eval::Loss, None);
         for a in actions {
-            let new = state.apply(*a);
+            let new = state.apply_sorted(*a);
             // already been to this state in our path
             if root_path.contains_key(&new) {
                 continue;
