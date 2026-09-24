@@ -4,10 +4,7 @@ use lru::LruCache;
 use solitaire_game::kplus::{action::Action, state::State};
 
 use crate::{
-    greedy::{GreedySolver, MOVE_CACHE_AVG_SIZE, MOVE_CACHE_HITS, MOVE_CACHE_MISS},
-    heuristic::h2,
-    move_generation::generate_moves,
-    Eval, RootPath, Solver,
+    greedy::GreedySolver, heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver,
 };
 
 pub struct NestedRolloutSolver {
@@ -115,48 +112,5 @@ impl Solver for NestedRolloutSolver {
         }
 
         max.1
-    }
-
-    fn play_game(
-        &mut self,
-        mut game: solitaire_game::kplus::KPlusSolitaire,
-    ) -> Option<crate::Solution> {
-        let mut root_path = RootPath::new();
-        let mut moves = Vec::new();
-        // slight waste
-        let mut actions = generate_moves(&game.state);
-        while !game.state.is_win() && !actions.is_empty() {
-            actions = generate_moves(&game.state);
-            root_path.insert(game.state);
-            // horizon after the insert, because we want this state to stay in the root_path
-            let horizon = root_path.len();
-
-            // if there's no new moves, we have basically lost
-            let Some(a) = self.next_move(&mut root_path, &game.state, &actions) else {
-                break;
-            };
-            // remove extra stuff added by the solver in case they didn't remove everything
-            root_path.rollback_to(horizon);
-            moves.push(a);
-            game.do_move_sorted(a);
-        }
-
-        let res = if game.state.is_win() {
-            Some(crate::Solution { moves })
-        } else {
-            None
-        };
-        // TODO: remove this function, everything above is copied from lib.rs
-        #[allow(static_mut_refs)]
-        unsafe {
-            println!(
-                "hits: {}, misses: {}, hr: {}, avg. cache size: {}",
-                MOVE_CACHE_HITS,
-                MOVE_CACHE_MISS,
-                MOVE_CACHE_HITS as f32 / (MOVE_CACHE_MISS + MOVE_CACHE_HITS) as f32,
-                MOVE_CACHE_AVG_SIZE
-            );
-        }
-        res
     }
 }
