@@ -8,7 +8,8 @@ use crate::{
 };
 
 pub struct NestedRolloutSolver {
-    caches: Vec<LruCache<State, Eval>>,
+    eval_caches: Vec<LruCache<State, Eval>>,
+    move_caches: LruCache<State, Vec<Action>>,
     max_depth: usize,
     greedy: GreedySolver,
 }
@@ -16,10 +17,11 @@ pub struct NestedRolloutSolver {
 impl NestedRolloutSolver {
     pub fn new(capacity: usize, max_depth: usize) -> Self {
         Self {
-            caches: Vec::from_iter(
+            eval_caches: Vec::from_iter(
                 std::iter::repeat_with(|| LruCache::new(NonZeroUsize::new(capacity).unwrap()))
                     .take(max_depth),
             ),
+            move_caches: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
             max_depth,
             greedy: GreedySolver::new(1),
         }
@@ -28,9 +30,9 @@ impl NestedRolloutSolver {
     pub fn eval(&mut self, root_path: &mut RootPath, mut state: State, depth: usize) -> Eval {
         // depth zero falls back to greedy
         if depth == self.max_depth {
-            return self.greedy.eval(root_path, state);
+            return self.greedy.eval(root_path, state, &mut self.move_caches);
         }
-        if let Some(eval) = self.caches[depth].get(&state) {
+        if let Some(eval) = self.eval_caches[depth].get(&state) {
             return *eval;
         }
         let original_state = state;
@@ -39,6 +41,7 @@ impl NestedRolloutSolver {
             root_path.insert(state);
 
             let mut max = (Eval::Loss, None);
+            // for now, only greedy gets to use the move cache
             let actions = generate_moves(&state);
             for a in &actions {
                 let new = state.apply_sorted(*a);
@@ -60,13 +63,13 @@ impl NestedRolloutSolver {
             } else {
                 // we ran out of unexplored moves
                 let eval = Eval::H(h2(&state, &actions));
-                self.caches[depth].put(original_state, eval);
+                self.eval_caches[depth].put(original_state, eval);
                 root_path.rollback_to(horizon);
                 return eval;
             }
         }
 
-        self.caches[depth].put(original_state, Eval::Win);
+        self.eval_caches[depth].put(original_state, Eval::Win);
         root_path.rollback_to(horizon);
         Eval::Win
     }

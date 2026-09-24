@@ -1,3 +1,6 @@
+use std::num::NonZeroUsize;
+
+use lru::LruCache;
 use solitaire_game::kplus::{action::Action, state::State};
 
 use crate::{heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver};
@@ -17,14 +20,22 @@ impl GreedySolver {
         }
     }
 
-    pub fn eval(&self, root_path: &mut RootPath, mut state: State) -> Eval {
+    pub fn eval(
+        &self,
+        root_path: &mut RootPath,
+        mut state: State,
+        move_cache: &mut LruCache<State, Vec<Action>>,
+    ) -> Eval {
         let horizon = root_path.len();
         while !state.is_win() {
             root_path.insert(state);
 
             let mut max = (isize::MIN, None);
-            let actions = generate_moves(&state);
-            for a in &actions {
+            let actions = match move_cache.get(&state) {
+                Some(actions) => actions,
+                None => &generate_moves(&state)
+            };
+            for a in actions {
                 let new = state.apply_sorted(*a);
                 // we're repeating states
                 if root_path.contains(&new) {
@@ -74,7 +85,7 @@ impl Solver for GreedySolver {
             // let h = if let Some(h) = self.cache.get(&new) {
             //     *h
             // } else {
-            let eval = self.eval(root_path, new);
+            let eval = self.eval(root_path, new, &mut LruCache::new(NonZeroUsize::new(1).unwrap()));
             let h = match eval {
                 Eval::Loss => isize::MIN + 1,
                 Eval::Win => isize::MAX,
