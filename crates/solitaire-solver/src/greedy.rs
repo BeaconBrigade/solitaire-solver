@@ -13,6 +13,10 @@ pub struct GreedySolver {
     // cache: LruCache<State, isize>,
 }
 
+pub static mut MOVE_CACHE_HITS: usize = 0;
+pub static mut MOVE_CACHE_MISS: usize = 0;
+pub static mut MOVE_CACHE_AVG_SIZE: f32 = 0.;
+
 impl GreedySolver {
     pub fn new(_capacity: usize) -> Self {
         Self {
@@ -31,7 +35,23 @@ impl GreedySolver {
             root_path.insert(state);
 
             let mut max = (isize::MIN, None);
-            let actions = move_cache.get_or_insert(state, || generate_moves(&state));
+            // let actions = move_cache.get_or_insert(state, || generate_moves(&state));
+            // try to get an idea of how useful the move_cache is
+            unsafe {
+                MOVE_CACHE_AVG_SIZE += 1.0 / (MOVE_CACHE_HITS as f32 + MOVE_CACHE_MISS as f32 + 1.0)
+                    * (move_cache.len() as f32 - MOVE_CACHE_AVG_SIZE)
+            }
+            let actions = match move_cache.get(&state) {
+                Some(a) => {
+                    unsafe { MOVE_CACHE_HITS += 1 }
+                    a
+                }
+                None => {
+                    unsafe { MOVE_CACHE_MISS += 1 }
+                    // guaranteed to insert, but it nicely returns what we put in
+                    move_cache.get_or_insert(state, || generate_moves(&state))
+                }
+            };
             for a in actions {
                 let new = state.apply_sorted(*a);
                 // we're repeating states
@@ -82,7 +102,11 @@ impl Solver for GreedySolver {
             // let h = if let Some(h) = self.cache.get(&new) {
             //     *h
             // } else {
-            let eval = self.eval(root_path, new, &mut LruCache::new(NonZeroUsize::new(1).unwrap()));
+            let eval = self.eval(
+                root_path,
+                new,
+                &mut LruCache::new(NonZeroUsize::new(1).unwrap()),
+            );
             let h = match eval {
                 Eval::Loss => isize::MIN + 1,
                 Eval::Win => isize::MAX,
