@@ -4,6 +4,10 @@ use solitaire_game::kplus::{action::Action, state::State};
 
 use crate::{heuristic::h2, move_generation::generate_moves, Eval, Solver};
 
+/// Solve the game using greedy rollouts
+///
+/// PLAY - defines whether eval returns Eval::Loss on dead ends (PLAY)
+///        or heuristic score (!PLAY, better for nested search)
 pub struct GreedySolver {
     // cache: LruCache<State, isize>,
 }
@@ -34,18 +38,15 @@ impl GreedySolver {
                     max = (h, Some(new));
                 }
             }
-            if let (_, Some(new)) = max {
+            if let Some(new) = max.1 {
                 state = new;
             } else {
                 // we ran out of unexplored moves
-                return Eval::Loss;
+                return Eval::H(h2(&state, &actions));
             }
         }
-        if state.is_win() {
-            Eval::Win
-        } else {
-            Eval::H(h2(&state, &generate_moves(&state)))
-        }
+
+        Eval::Win
     }
 }
 

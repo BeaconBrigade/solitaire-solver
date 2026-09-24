@@ -124,9 +124,10 @@ fn solve(deck: String, method: String, json: bool, n: Option<Vec<usize>>) {
         }
         "nested" => {
             let now = Instant::now();
+            let depth = n.unwrap_or(vec![1])[0];
             (
                 now,
-                NestedRolloutSolver::new(50_000, n.unwrap_or(vec![2])[0]).play_game(game),
+                NestedRolloutSolver::new(50_000, depth).play_game(game),
             )
         }
         // "multistage" => {

@@ -1,22 +1,25 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZeroUsize};
 
+use lru::LruCache;
 use solitaire_game::kplus::{action::Action, state::State};
 
 use crate::{greedy::GreedySolver, heuristic::h2, move_generation::generate_moves, Eval, Solver};
 
 pub struct NestedRolloutSolver {
-    // caches: Vec<LruCache<State, Eval>>,
-    depth: usize,
+    caches: Vec<LruCache<State, Eval>>,
+    max_depth: usize,
+    greedy: GreedySolver,
 }
 
 impl NestedRolloutSolver {
-    pub fn new(_capacity: usize, depth: usize) -> Self {
+    pub fn new(capacity: usize, max_depth: usize) -> Self {
         Self {
-            // caches: Vec::from_iter(
-            //     std::iter::repeat_with(|| LruCache::new(NonZeroUsize::new(capacity).unwrap()))
-            //         .take(depth),
-            // ),
-            depth,
+            caches: Vec::from_iter(
+                std::iter::repeat_with(|| LruCache::new(NonZeroUsize::new(capacity).unwrap()))
+                    .take(max_depth),
+            ),
+            max_depth,
+            greedy: GreedySolver::new(1),
         }
     }
 
@@ -26,6 +29,14 @@ impl NestedRolloutSolver {
         mut state: State,
         depth: usize,
     ) -> Eval {
+        // depth zero falls back to greedy
+        if depth == self.max_depth {
+            return self.greedy.eval(root_path, state);
+        }
+        if let Some(eval) = self.caches[depth].get(&state) {
+            return *eval;
+        }
+        let original_state = state;
         while !state.is_win() {
             root_path.insert(state, ());
 
@@ -37,35 +48,27 @@ impl NestedRolloutSolver {
                 if root_path.contains_key(&new) {
                     continue;
                 }
-                let eval = if depth >= self.depth {
-                    // fall back to greedy eval on the last level
-                    GreedySolver::new(1).eval(root_path.clone(), new)
-                }
-                /*else if let Some(eval) = self.caches[n].get(&new) {
-                    *eval
-                } */
-                else {
-                    self.eval(root_path.clone(), new, depth + 1)
-                };
+                let eval = self.eval(root_path.clone(), new, depth + 1);
                 if eval > max.0 {
                     max = (eval, Some(new));
+                    // early terminate search
+                    if eval == Eval::Win {
+                        break;
+                    }
                 }
             }
-            if let (_, Some(new)) = max {
+            if let Some(new) = max.1 {
                 state = new;
             } else {
                 // we ran out of unexplored moves
-                return Eval::Loss;
+                let eval = Eval::H(h2(&state, &actions));
+                self.caches[depth].put(original_state, eval);
+                return eval;
             }
         }
-        // if n < self.depth {
-        //     self.caches[n].put(original_state, eval);
-        // }
-        if state.is_win() {
-            Eval::Win
-        } else {
-            Eval::H(h2(&state, &generate_moves(&state)))
-        }
+
+        self.caches[depth].put(original_state, Eval::Win);
+        Eval::Win
     }
 }
 
@@ -98,6 +101,10 @@ impl Solver for NestedRolloutSolver {
             // self.caches[0].put(new, eval);
             if eval > max.0 {
                 max = (eval, Some(*a));
+                // early break for wins
+                if eval == Eval::Win {
+                    break;
+                }
             }
         }
 
