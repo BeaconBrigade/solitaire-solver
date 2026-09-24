@@ -4,8 +4,9 @@
 //!
 //!
 
-use std::{cmp::Ordering, collections::HashSet};
+use std::cmp::Ordering;
 
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use solitaire_game::kplus::{action::Action, state::State, KPlusSolitaire};
 
@@ -86,7 +87,7 @@ pub trait Solver {
 #[derive(Default)]
 pub struct RootPath {
     history: Vec<State>,
-    visited: HashSet<State>,
+    visited: FxHashSet<State>,
 }
 
 impl RootPath {
