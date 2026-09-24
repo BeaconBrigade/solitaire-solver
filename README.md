@@ -28,7 +28,8 @@ You can also profile the program using [`samply`](https://crates.io/crates/sampl
 
 ```shell
 # run in crates/solitaire-solver to test the solver using the nested method on decks/t shuffling
-samply record ../../target/release/cli solve nested ../../decks/t -j 2
+cargo b --bin cli --profile=profiling
+samply record ../../target/profiling/cli solve nested ../../decks/t -j 2
 ```
 
 The `profile.tar.gz` that are generated are already in the `.gitignore`.
