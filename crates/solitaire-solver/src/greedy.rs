@@ -31,7 +31,10 @@ impl GreedySolver {
             root_path.insert(state);
 
             let mut max = (isize::MIN, None);
-            let actions = move_cache.get_or_insert(state, || generate_moves(&state));
+            let actions = match move_cache.get(&state) {
+                Some(a) => a,
+                None => &generate_moves(&state),
+            };
             // try to get an idea of how useful the move_cache is
             for a in actions {
                 let new = state.apply_sorted(*a);
