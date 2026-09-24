@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use solitaire_game::kplus::{action::Action, state::State};
 
-use crate::{heuristic::h2, move_generation::generate_moves, Eval, Solver};
+use crate::{heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver};
 
 /// Solve the game using greedy rollouts
 ///
@@ -19,16 +17,17 @@ impl GreedySolver {
         }
     }
 
-    pub fn eval(&self, mut root_path: HashMap<State, ()>, mut state: State) -> Eval {
+    pub fn eval(&self, root_path: &mut RootPath, mut state: State) -> Eval {
+        let horizon = root_path.len();
         while !state.is_win() {
-            root_path.insert(state, ());
+            root_path.insert(state);
 
             let mut max = (isize::MIN, None);
             let actions = generate_moves(&state);
             for a in &actions {
                 let new = state.apply_sorted(*a);
                 // we're repeating states
-                if root_path.contains_key(&new) {
+                if root_path.contains(&new) {
                     continue;
                 }
                 let candidate_moves = generate_moves(&new);
@@ -42,9 +41,11 @@ impl GreedySolver {
                 state = new;
             } else {
                 // we ran out of unexplored moves
+                root_path.rollback_to(horizon);
                 return Eval::H(h2(&state, &actions));
             }
         }
+        root_path.rollback_to(horizon);
 
         Eval::Win
     }
@@ -59,7 +60,7 @@ impl Default for GreedySolver {
 impl Solver for GreedySolver {
     fn next_move(
         &mut self,
-        root_path: &HashMap<State, ()>,
+        root_path: &mut RootPath,
         state: &State,
         actions: &Vec<Action>,
     ) -> Option<Action> {
@@ -67,13 +68,13 @@ impl Solver for GreedySolver {
         for a in actions {
             let new = state.apply_sorted(*a);
             // already been to this state in our path
-            if root_path.contains_key(&new) {
+            if root_path.contains(&new) {
                 continue;
             }
             // let h = if let Some(h) = self.cache.get(&new) {
             //     *h
             // } else {
-            let eval = self.eval(root_path.clone(), new);
+            let eval = self.eval(root_path, new);
             let h = match eval {
                 Eval::Loss => isize::MIN + 1,
                 Eval::Win => isize::MAX,

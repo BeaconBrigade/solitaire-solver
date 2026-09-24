@@ -4,7 +4,7 @@
 //!
 //!
 
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashSet};
 
 use serde::{Deserialize, Serialize};
 use solitaire_game::kplus::{action::Action, state::State, KPlusSolitaire};
@@ -48,24 +48,28 @@ impl PartialOrd for Eval {
 pub trait Solver {
     fn next_move(
         &mut self,
-        root_path: &HashMap<State, ()>,
+        root_path: &mut RootPath,
         state: &State,
         actions: &Vec<Action>,
     ) -> Option<Action>;
 
     fn play_game(&mut self, mut game: KPlusSolitaire) -> Option<Solution> {
-        let mut root_path = HashMap::new();
+        let mut root_path = RootPath::new();
         let mut moves = Vec::new();
         // slight waste
         let mut actions = generate_moves(&game.state);
         while !game.state.is_win() && !actions.is_empty() {
             actions = generate_moves(&game.state);
-            root_path.insert(game.state, ());
+            root_path.insert(game.state);
+            // horizon after the insert, because we want this state to stay in the root_path
+            let horizon = root_path.len();
 
             // if there's no new moves, we have basically lost
-            let Some(a) = self.next_move(&root_path, &game.state, &actions) else {
+            let Some(a) = self.next_move(&mut root_path, &game.state, &actions) else {
                 break;
             };
+            // remove extra stuff added by the solver in case they didn't remove everything
+            root_path.rollback_to(horizon);
             moves.push(a);
             game.do_move_sorted(a);
         }
@@ -74,6 +78,42 @@ pub trait Solver {
             Some(Solution { moves })
         } else {
             None
+        }
+    }
+}
+
+/// Vec + HashSet to keep track of visited states without having to clone a ton
+#[derive(Default)]
+pub struct RootPath {
+    history: Vec<State>,
+    visited: HashSet<State>,
+}
+
+impl RootPath {
+    pub fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.history.len()
+    }
+
+    pub fn contains(&self, state: &State) -> bool {
+        self.visited.contains(state)
+    }
+
+    pub fn insert(&mut self, state: State) {
+        self.history.push(state);
+        self.visited.insert(state);
+    }
+
+    pub fn rollback_to(&mut self, horizon: usize) {
+        let l = self.len();
+        for _ in horizon..l {
+            let s = self.history.pop().expect("i<self.len() so pop should always have an element");
+            self.visited.remove(&s);
         }
     }
 }

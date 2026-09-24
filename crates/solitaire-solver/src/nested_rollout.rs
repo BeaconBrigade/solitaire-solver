@@ -1,9 +1,11 @@
-use std::{collections::HashMap, num::NonZeroUsize};
+use std::num::NonZeroUsize;
 
 use lru::LruCache;
 use solitaire_game::kplus::{action::Action, state::State};
 
-use crate::{greedy::GreedySolver, heuristic::h2, move_generation::generate_moves, Eval, Solver};
+use crate::{
+    greedy::GreedySolver, heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver,
+};
 
 pub struct NestedRolloutSolver {
     caches: Vec<LruCache<State, Eval>>,
@@ -23,12 +25,7 @@ impl NestedRolloutSolver {
         }
     }
 
-    pub fn eval(
-        &mut self,
-        mut root_path: HashMap<State, ()>,
-        mut state: State,
-        depth: usize,
-    ) -> Eval {
+    pub fn eval(&mut self, root_path: &mut RootPath, mut state: State, depth: usize) -> Eval {
         // depth zero falls back to greedy
         if depth == self.max_depth {
             return self.greedy.eval(root_path, state);
@@ -37,18 +34,19 @@ impl NestedRolloutSolver {
             return *eval;
         }
         let original_state = state;
+        let horizon = root_path.len();
         while !state.is_win() {
-            root_path.insert(state, ());
+            root_path.insert(state);
 
             let mut max = (Eval::Loss, None);
             let actions = generate_moves(&state);
             for a in &actions {
                 let new = state.apply_sorted(*a);
                 // we're repeating states
-                if root_path.contains_key(&new) {
+                if root_path.contains(&new) {
                     continue;
                 }
-                let eval = self.eval(root_path.clone(), new, depth + 1);
+                let eval = self.eval(root_path, new, depth + 1);
                 if eval > max.0 {
                     max = (eval, Some(new));
                     // early terminate search
@@ -63,11 +61,13 @@ impl NestedRolloutSolver {
                 // we ran out of unexplored moves
                 let eval = Eval::H(h2(&state, &actions));
                 self.caches[depth].put(original_state, eval);
+                root_path.rollback_to(horizon);
                 return eval;
             }
         }
 
         self.caches[depth].put(original_state, Eval::Win);
+        root_path.rollback_to(horizon);
         Eval::Win
     }
 }
@@ -81,7 +81,7 @@ impl Default for NestedRolloutSolver {
 impl Solver for NestedRolloutSolver {
     fn next_move(
         &mut self,
-        root_path: &HashMap<State, ()>,
+        root_path: &mut RootPath,
         state: &State,
         actions: &Vec<Action>,
     ) -> Option<Action> {
@@ -89,13 +89,13 @@ impl Solver for NestedRolloutSolver {
         for a in actions {
             let new = state.apply_sorted(*a);
             // already been to this state in our path
-            if root_path.contains_key(&new) {
+            if root_path.contains(&new) {
                 continue;
             }
             // let eval = if let Some(eval) = self.caches[0].get(&new) {
             //     *eval
             // } else {
-            let eval = self.eval(root_path.clone(), new, 0);
+            let eval = self.eval(root_path, new, 0);
             // };
 
             // self.caches[0].put(new, eval);
