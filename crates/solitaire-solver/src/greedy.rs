@@ -33,7 +33,11 @@ impl GreedySolver {
             let mut max = (isize::MIN, None);
             let actions = match move_cache.get(&state) {
                 Some(a) => a,
-                None => &generate_moves(&state),
+                None => {
+                    let actions = generate_moves(&state);
+                    move_cache.put(state, actions);
+                    move_cache.get(&state).unwrap()
+                },
             };
             // try to get an idea of how useful the move_cache is
             for a in actions {
