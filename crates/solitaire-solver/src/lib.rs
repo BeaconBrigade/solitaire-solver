@@ -6,6 +6,7 @@
 
 use std::cmp::Ordering;
 
+use lru::LruCache;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use solitaire_game::kplus::{action::Action, state::State, KPlusSolitaire};
@@ -113,7 +114,25 @@ impl RootPath {
     pub fn rollback_to(&mut self, horizon: usize) {
         let l = self.len();
         for _ in horizon..l {
-            let s = self.history.pop().expect("i<self.len() so pop should always have an element");
+            let s = self
+                .history
+                .pop()
+                .expect("i<self.len() so pop should always have an element");
+            self.visited.remove(&s);
+        }
+    }
+
+    /// Rolls the RootPath back a horizon while caching the final heuristic for each popped state
+    pub fn rollback_with_cache(
+        &mut self,
+        horizon: usize,
+        cache: &mut LruCache<State, Eval>,
+        eval: Eval,
+    ) {
+        let l = self.len();
+        for _ in horizon..l {
+            let s = self.history.pop().unwrap();
+            cache.put(s, eval);
             self.visited.remove(&s);
         }
     }

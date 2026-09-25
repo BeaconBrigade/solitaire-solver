@@ -6,18 +6,11 @@ use solitaire_game::kplus::{action::Action, state::State};
 use crate::{heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver};
 
 /// Solve the game using greedy rollouts
-///
-/// PLAY - defines whether eval returns Eval::Loss on dead ends (PLAY)
-///        or heuristic score (!PLAY, better for nested search)
-pub struct GreedySolver {
-    // cache: LruCache<State, isize>,
-}
+pub struct GreedySolver {}
 
 impl GreedySolver {
     pub fn new(_capacity: usize) -> Self {
-        Self {
-            // cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
-        }
+        Self {}
     }
 
     pub fn eval(
@@ -37,7 +30,7 @@ impl GreedySolver {
                     let actions = generate_moves(&state);
                     move_cache.put(state, actions);
                     move_cache.get(&state).unwrap()
-                },
+                }
             };
             // try to get an idea of how useful the move_cache is
             for a in actions {

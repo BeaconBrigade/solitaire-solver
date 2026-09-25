@@ -35,7 +35,6 @@ impl NestedRolloutSolver {
         if let Some(eval) = self.eval_caches[depth].get(&state) {
             return *eval;
         }
-        let original_state = state;
         let horizon = root_path.len();
         while !state.is_win() {
             root_path.insert(state);
@@ -63,14 +62,12 @@ impl NestedRolloutSolver {
             } else {
                 // we ran out of unexplored moves
                 let eval = Eval::H(h2(&state, &actions));
-                self.eval_caches[depth].put(original_state, eval);
-                root_path.rollback_to(horizon);
+                root_path.rollback_with_cache(horizon, &mut self.eval_caches[depth], eval);
                 return eval;
             }
         }
 
-        self.eval_caches[depth].put(original_state, Eval::Win);
-        root_path.rollback_to(horizon);
+        root_path.rollback_with_cache(horizon, &mut self.eval_caches[depth], Eval::Win);
         Eval::Win
     }
 }
