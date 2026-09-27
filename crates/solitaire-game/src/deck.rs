@@ -80,21 +80,28 @@ impl Card {
         Self { suit, value }
     }
 
-    pub fn has_same_colour(&self, other: &Card) -> bool {
+    pub fn has_same_colour(&self, other: &Self) -> bool {
         ((self.suit == Suit::Hearts || self.suit == Suit::Diamonds)
             && (other.suit == Suit::Hearts || other.suit == Suit::Diamonds))
             || ((self.suit == Suit::Clubs || self.suit == Suit::Spades)
                 && (other.suit == Suit::Clubs || other.suit == Suit::Spades))
     }
 
-    pub fn colour_pair(&self) -> Card {
+    pub fn colour_pair(&self) -> Self {
         Self {
             suit: self.suit.matching_suit(),
             value: self.value,
         }
     }
 
-    pub fn build_cards(&self) -> Option<(Card, Card)> {
+    pub fn colour_opposite(&self) -> Self {
+        Self {
+            suit: self.suit.other_colour(),
+            value: self.value,
+        }
+    }
+
+    pub fn build_cards(&self) -> Option<(Self, Self)> {
         if self.value == Value::Ace {
             None
         } else {
@@ -107,6 +114,29 @@ impl Card {
                     suit: o.matching_suit(),
                 },
             ))
+        }
+    }
+
+    pub fn next_card(&self) -> Option<Self> {
+        if self.value == Value::King {
+            None
+        } else {
+            Some(Self {
+                value: Value::try_from(self.value as u8 + 1).unwrap(),
+                suit: self.suit,
+            })
+        }
+    }
+
+    pub fn prev_card(&self) -> Option<Self> {
+        if self.value == Value::Ace {
+            None
+        } else {
+            Some(Self {
+                // use wrapping sub since overflows will naturally result in Nones
+                value: Value::try_from((self.value as u8).wrapping_sub(1)).unwrap(),
+                suit: self.suit,
+            })
         }
     }
 }
@@ -200,6 +230,28 @@ impl Value {
     fn below(&self) -> Value {
         let x = (*self as u8 - 1) % 13;
         unsafe { *((&x as *const u8) as *const Value) }
+    }
+}
+
+impl TryFrom<u8> for Value {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::Ace),
+            2 => Ok(Self::Two),
+            3 => Ok(Self::Three),
+            4 => Ok(Self::Four),
+            5 => Ok(Self::Five),
+            6 => Ok(Self::Six),
+            7 => Ok(Self::Seven),
+            8 => Ok(Self::Eight),
+            9 => Ok(Self::Nine),
+            10 => Ok(Self::Ten),
+            11 => Ok(Self::Jack),
+            12 => Ok(Self::Queen),
+            13 => Ok(Self::King),
+            _ => Err(()),
+        }
     }
 }
 

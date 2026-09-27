@@ -4,11 +4,11 @@
 
 use solitaire_game::{
     common::{find_last_idx, Coord, Location},
+    deck::{Card, Suit, Value},
     kplus::{action::Action, state::State},
 };
 
 pub fn generate_moves(state: &State) -> Vec<Action> {
-    // TODO: make this function take an existing vec, to remove reallocations
     // for each available card in the talon we need to check:
     // - can it move to any column in the foundation (max 1)
     // - can it move to any column in the tableau
@@ -20,133 +20,218 @@ pub fn generate_moves(state: &State) -> Vec<Action> {
     // TODO: implement pruning of stupid moves
     // e.g.: moving an ace from foundation to tableau
     let mut moves = Vec::new();
+
+    // find all possible destination cards
+    let (foundation_available_cards, foundation_targets) = foundation_targets(&state.foundation);
+    let tableau_targets = tableau_targets(&state.tableau);
+
+    // go through all talon moves
     let mut from = Coord::new(Location::Talon, 0);
-    for card in state.talon.0.iter() {
-        if card.is_none() {
-            from.idx += 1;
+    for (i, card) in state.talon.0.iter().enumerate() {
+        let Some(card) = card else {
+            continue;
+        };
+        // avoid looking for moves that are already invalid
+        if !state.is_reachable_talon(i as u8) {
             continue;
         }
-        // check foundation
-        for (p, pile) in state.foundation.iter().enumerate() {
-            let to = Coord::new(
-                Location::Foundation(p as u8),
-                find_last_idx(pile.iter(), |c| c.is_some())
-                    .map(|i| i as u8 + 1)
-                    .unwrap_or(0),
-            );
-            // the pile is full
-            if to.idx > 12 {
-                continue;
-            }
-            let a = Action::new(from, to);
-            if state.is_valid_move(a) {
-                moves.push(a);
-                // can only move to one column at a time
-                break;
-            }
-        }
-        // check tableau
-        for (p, pile) in state.tableau.iter().enumerate() {
-            let to = Coord::new(
-                Location::Tableau(p as u8),
-                find_last_idx(pile.0.iter(), |c| c.is_some())
-                    .map(|i| i as u8 + 1)
-                    .unwrap_or(0),
-            );
-            // tableau is full
-            if to.idx > 18 {
-                continue;
-            }
-            let a = Action::new(from, to);
-            if state.is_valid_move(a) {
-                moves.push(a);
-                // can only move into one pile unless we're a king and
-                // then it doesn't matter
-                break;
-            }
-        }
 
-        from.idx += 1;
+        from.idx = i as u8;
+        find_moves(
+            &mut moves,
+            from,
+            card,
+            Some(&foundation_targets),
+            &tableau_targets,
+        );
     }
 
-    // check tableau
+    // go through all tableau moves
     let mut from = Coord::new(Location::Tableau(0), 0);
     for (p, pile) in state.tableau.iter().enumerate() {
         from.location = Location::Tableau(p as u8);
-        from.idx = pile.1;
-        for _ in pile.0[pile.1 as usize..].iter().flatten() {
-            // check moves into the foundation
-            for (p_f, pile_f) in state.foundation.iter().enumerate() {
-                let to = Coord::new(
-                    Location::Foundation(p_f as u8),
-                    find_last_idx(pile_f.iter(), |c| c.is_some())
-                        .map(|i| i as u8 + 1)
-                        .unwrap_or(0),
-                );
-                // pile is full
-                if to.idx > 12 {
-                    continue;
-                }
-                let a = Action::new(from, to);
-                if state.is_valid_move(a) {
-                    moves.push(a);
-                    // can only move to one column at a time
-                    break;
-                }
-            }
-            // check moves into the tableau
-            for (p_t, pile_t) in state.tableau.iter().enumerate() {
-                // don't search within our pile
-                if p_t == p {
-                    continue;
-                }
-                let to = Coord::new(
-                    Location::Tableau(p_t as u8),
-                    find_last_idx(pile_t.0.iter(), |c| c.is_some())
-                        .map(|i| i as u8 + 1)
-                        .unwrap_or(0),
-                );
-                // tableau pile is full
-                if to.idx > 18 {
-                    continue;
-                }
-                let a = Action::new(from, to);
-                if state.is_valid_move(a) {
-                    moves.push(a);
-                }
-            }
-            from.idx += 1;
+        for (i, card) in pile.0[pile.1 as usize..].iter().flatten().enumerate() {
+            from.idx = pile.1 + i as u8;
+            find_moves(
+                &mut moves,
+                from,
+                card,
+                Some(&foundation_targets),
+                &tableau_targets,
+            );
         }
     }
 
-    // check foundation
-    for (p, pile) in state.foundation.iter().enumerate() {
-        let Some(idx) = find_last_idx(pile.iter(), |c| c.is_some()) else {
+    // go through all foundation moves
+    for (p, i) in foundation_available_cards.into_iter().enumerate() {
+        let Some(i) = i else {
             continue;
         };
-        let from = Coord::new(Location::Foundation(p as u8), idx as u8);
-        for (p_t, pile_t) in state.tableau.iter().enumerate() {
-            let to = Coord::new(
-                Location::Tableau(p_t as u8),
-                find_last_idx(pile_t.0.iter(), |c| c.is_some())
-                    .map(|i| i as u8 + 1)
-                    .unwrap_or(0),
-            );
-            // tableau pile is full
-            if to.idx > 18 {
-                continue;
-            }
-            let a = Action::new(from, to);
-            if state.is_valid_move(a) {
-                moves.push(a);
-                // if we can move to one pile, we can't move to another
-                // or: we are a king and it doesn't matter
-                break;
-            }
-        }
+        let from = Coord::new(Location::Foundation(p as u8), i as u8);
+        let card = state.foundation[p][i].unwrap();
+        find_moves(&mut moves, from, &card, None, &tableau_targets);
     }
 
     moves
+}
+
+fn find_moves(
+    moves: &mut Vec<Action>,
+    from: Coord,
+    card: &Card,
+    foundation_targets: Option<&[Option<(Card, Coord)>; 4]>,
+    tableau_targets: &[Option<(Card, Coord)>; 7],
+) {
+    // if the card is an ace, there's only one spot in the foundation it can go
+    let mut skip_foundation = false;
+    if card.value == Value::Ace {
+        if let Some(foundation_targets) = foundation_targets {
+            if let Some((_, to)) = foundation_targets
+                .iter()
+                .flatten()
+                .find(|(tgt, _)| tgt.value == Value::Ace)
+            {
+                moves.push(Action::new(from, *to));
+                skip_foundation = true;
+            }
+        }
+    }
+
+    // if the card is a king, we say it has only one move into the tableau:
+    // to the first open spot in the pile
+    let mut skip_tableau = false;
+    if card.value == Value::King {
+        if let Some((_, to)) = tableau_targets
+            .iter()
+            .flatten()
+            .find(|(tgt, _)| tgt.value == Value::King)
+        {
+            moves.push(Action::new(from, *to));
+            skip_tableau = true;
+        }
+    }
+
+    // check the tableau for moves
+    if !skip_tableau {
+        for (target_card, to) in tableau_targets.iter().flatten() {
+            // can't move into your own pile
+            if to.location == from.location {
+                continue;
+            }
+            if card == target_card || *card == target_card.colour_pair() {
+                moves.push(Action::new(from, *to));
+                if from.location == Location::Talon {
+                    // we only consider one move from talon to tableau
+                    // since they're essentially equivalent (don't
+                    // affect existence of solution but could add
+                    // at most one extra move to solution length)
+                    break;
+                }
+            }
+        }
+    }
+
+    if skip_foundation {
+        return;
+    }
+    // foundation targets is passed as an option, so when searching for
+    // moves of cards in the foundation, we don't do a search over the
+    // foundation.
+    let Some(foundation_targets) = foundation_targets else {
+        return;
+    };
+    // check the foundation for moves
+    for (target_card, to) in foundation_targets.iter().flatten() {
+        if card == target_card {
+            moves.push(Action::new(from, *to));
+            // can only move to one spot in the foundation - no use
+            // checking more piles
+            break;
+        }
+    }
+}
+
+/// Returns what card is needed to go on the top of each pile and the
+/// associated destination [`Coord`].
+///
+/// If a pile is empty it has an Ace in that slot. If there's
+/// a King in the pile, it returns None (no more cards can go
+/// in that pile).
+///
+/// Each empty pile will have a different required Ace, so
+/// this changes the output of generate_moves from the old version.
+///
+/// Assumes the piles are filled from left to right.
+// TODO: turn this to only put the first ace, since the rest are implied.
+//       this would match what the old algorithm did
+fn foundation_targets(
+    foundation: &[[Option<Card>; 13]; 4],
+) -> ([Option<usize>; 4], [Option<(Card, Coord)>; 4]) {
+    let mut foundation_targets = [None, None, None, None];
+    let mut indices = [0, 1, 2, 3];
+    let mut available_cards = [None; 4];
+    let mut remaining_suits = [Suit::Hearts, Suit::Spades, Suit::Diamonds, Suit::Clubs];
+    for (i, pile) in foundation.iter().enumerate() {
+        let last_idx = find_last_idx(pile.iter(), |c| c.is_some());
+        let target = if let Some(j) = last_idx {
+            available_cards[i] = Some(j);
+            let last_card = pile[j].unwrap();
+            last_card
+                .next_card()
+                .map(|c| (c, Coord::new(Location::Foundation(i as u8), (j + 1) as u8)))
+        } else {
+            Some((
+                Card::new(remaining_suits[i], Value::Ace),
+                Coord::new(Location::Foundation(i as u8), 0),
+            ))
+        };
+
+        if let Some((t, _)) = target {
+            // found suit is in position indices[t.suit] in remaining_suits array
+            // found suit is in position t.suit in the indices array
+            //
+            // swap suit is in position i in remaining_suits array
+            // swap suit is in position remaining_suits[i] as usize in indices array
+            // we have to swap
+            let found_suit_idx = indices[t.suit as usize];
+            let swap_suit_idx = remaining_suits[i] as usize;
+            if found_suit_idx > i {
+                indices.swap(t.suit as usize, swap_suit_idx);
+                remaining_suits.swap(found_suit_idx, i);
+            }
+        }
+        foundation_targets[i] = target;
+    }
+
+    (available_cards, foundation_targets)
+}
+
+/// Returns what card is needed for each pile of the tableau. Since two zero or
+/// two cards could go on each pile, if the pile has `Some(card)`, then the
+/// other card will be found using [`Card::colour_pair`]. If the pile is empty,
+/// a King of Hearts will be in that position, but any king can go there.
+fn tableau_targets(tableau: &[([Option<Card>; 19], u8); 7]) -> [Option<(Card, Coord)>; 7] {
+    let mut tableau_targets = [None; 7];
+    for (i, pile) in tableau.iter().enumerate() {
+        let target = if let Some(j) = find_last_idx(pile.0.iter(), |c| c.is_some()) {
+            let last_card = pile.0[j].unwrap();
+            last_card.prev_card().map(|c| {
+                (
+                    c.colour_opposite(),
+                    Coord::new(Location::Tableau(i as u8), (j + 1) as u8),
+                )
+            })
+        } else {
+            Some((
+                Card::new(Suit::Hearts, Value::King),
+                Coord::new(Location::Tableau(i as u8), 0),
+            ))
+        };
+
+        tableau_targets[i] = target;
+    }
+
+    tableau_targets
 }
 
 #[cfg(test)]
@@ -157,6 +242,8 @@ mod tests {
     use solitaire_game::common::*;
     use solitaire_game::deck::*;
     use solitaire_game::kplus::{action::*, KPlusSolitaire};
+
+    use crate::move_generation::foundation_targets;
 
     use super::generate_moves;
 
@@ -181,6 +268,18 @@ mod tests {
     macro_rules! a {
         ($f:expr, $t:expr) => {
             Action::new($f, $t)
+        };
+    }
+
+    macro_rules! cd {
+        ($s:expr) => {
+            Some(Card::from_str($s).unwrap())
+        };
+    }
+
+    macro_rules! ccd {
+        ($s:expr, $c:expr) => {
+            Some((Card::from_str($s).unwrap(), $c))
         };
     }
 
@@ -292,5 +391,368 @@ mod tests {
         .collect();
 
         assert_eq!(set, required);
+    }
+
+    #[test]
+    fn simple_foundation_targets() {
+        let foundation = [[None; 13], [None; 13], [None; 13], [None; 13]];
+        let exp_targets = [
+            ccd!("Hearts Ace", fd!(0, 0)),
+            ccd!("Spades Ace", fd!(1, 0)),
+            ccd!("Diamonds Ace", fd!(2, 0)),
+            ccd!("Clubs Ace", fd!(3, 0)),
+        ];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets,)
+    }
+
+    #[test]
+    fn no_king_foundation_targets() {
+        let foundation = [
+            [
+                cd!("Hearts Ace"),
+                cd!("Hearts Two"),
+                cd!("Hearts Three"),
+                cd!("Hearts Four"),
+                cd!("Hearts Five"),
+                cd!("Hearts Six"),
+                cd!("Hearts Seven"),
+                cd!("Hearts Eight"),
+                cd!("Hearts Nine"),
+                cd!("Hearts Ten"),
+                cd!("Hearts Jack"),
+                cd!("Hearts Queen"),
+                None,
+            ],
+            [None; 13],
+            [None; 13],
+            [None; 13],
+        ];
+        let exp_targets = [
+            ccd!("Hearts King", fd!(0, 12)),
+            ccd!("Spades Ace", fd!(1, 0)),
+            ccd!("Diamonds Ace", fd!(2, 0)),
+            ccd!("Clubs Ace", fd!(3, 0)),
+        ];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets,)
+    }
+
+    #[test]
+    fn no_target() {
+        let foundation = [
+            [
+                cd!("Hearts Ace"),
+                cd!("Hearts Two"),
+                cd!("Hearts Three"),
+                cd!("Hearts Four"),
+                cd!("Hearts Five"),
+                cd!("Hearts Six"),
+                cd!("Hearts Seven"),
+                cd!("Hearts Eight"),
+                cd!("Hearts Nine"),
+                cd!("Hearts Ten"),
+                cd!("Hearts Jack"),
+                cd!("Hearts Queen"),
+                cd!("Hearts King"),
+            ],
+            [None; 13],
+            [None; 13],
+            [None; 13],
+        ];
+        let exp_targets = [
+            None,
+            ccd!("Spades Ace", fd!(1, 0)),
+            ccd!("Diamonds Ace", fd!(2, 0)),
+            ccd!("Clubs Ace", fd!(3, 0)),
+        ];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets,)
+    }
+
+    #[test]
+    fn no_king_foundation_targets_last() {
+        let foundation = [
+            [None; 13],
+            [None; 13],
+            [None; 13],
+            [
+                cd!("Clubs Ace"),
+                cd!("Clubs Two"),
+                cd!("Clubs Three"),
+                cd!("Clubs Four"),
+                cd!("Clubs Five"),
+                cd!("Clubs Six"),
+                cd!("Clubs Seven"),
+                cd!("Clubs Eight"),
+                cd!("Clubs Nine"),
+                cd!("Clubs Ten"),
+                cd!("Clubs Jack"),
+                cd!("Clubs Queen"),
+                None,
+            ],
+        ];
+        let exp_targets = [
+            ccd!("Hearts Ace", fd!(0, 0)),
+            ccd!("Spades Ace", fd!(1, 0)),
+            ccd!("Diamonds Ace", fd!(2, 0)),
+            ccd!("Clubs King", fd!(3, 12)),
+        ];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets,)
+    }
+
+    #[test]
+    fn no_king_foundation_targets_out_of_order() {
+        let foundation = [
+            [None; 13],
+            [None; 13],
+            [
+                cd!("Clubs Ace"),
+                cd!("Clubs Two"),
+                cd!("Clubs Three"),
+                cd!("Clubs Four"),
+                cd!("Clubs Five"),
+                cd!("Clubs Six"),
+                cd!("Clubs Seven"),
+                cd!("Clubs Eight"),
+                cd!("Clubs Nine"),
+                cd!("Clubs Ten"),
+                cd!("Clubs Jack"),
+                cd!("Clubs Queen"),
+                None,
+            ],
+            [None; 13],
+        ];
+        let exp_targets = [
+            ccd!("Hearts Ace", fd!(0, 0)),
+            ccd!("Spades Ace", fd!(1, 0)),
+            ccd!("Clubs King", fd!(2, 12)),
+            ccd!("Diamonds Ace", fd!(3, 0)),
+        ];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets,)
+    }
+
+    #[test]
+    fn targets_all_full() {
+        let foundation = [
+            [
+                cd!("Spades Ace"),
+                cd!("Spades Two"),
+                cd!("Spades Three"),
+                cd!("Spades Four"),
+                cd!("Spades Five"),
+                cd!("Spades Six"),
+                cd!("Spades Seven"),
+                cd!("Spades Eight"),
+                cd!("Spades Nine"),
+                cd!("Spades Ten"),
+                cd!("Spades Jack"),
+                cd!("Spades Queen"),
+                cd!("Spades King"),
+            ],
+            [
+                cd!("Hearts Ace"),
+                cd!("Hearts Two"),
+                cd!("Hearts Three"),
+                cd!("Hearts Four"),
+                cd!("Hearts Five"),
+                cd!("Hearts Six"),
+                cd!("Hearts Seven"),
+                cd!("Hearts Eight"),
+                cd!("Hearts Nine"),
+                cd!("Hearts Ten"),
+                cd!("Hearts Jack"),
+                cd!("Hearts Queen"),
+                cd!("Hearts King"),
+            ],
+            [
+                cd!("Clubs Ace"),
+                cd!("Clubs Two"),
+                cd!("Clubs Three"),
+                cd!("Clubs Four"),
+                cd!("Clubs Five"),
+                cd!("Clubs Six"),
+                cd!("Clubs Seven"),
+                cd!("Clubs Eight"),
+                cd!("Clubs Nine"),
+                cd!("Clubs Ten"),
+                cd!("Clubs Jack"),
+                cd!("Clubs Queen"),
+                cd!("Clubs King"),
+            ],
+            [
+                cd!("Diamonds Ace"),
+                cd!("Diamonds Two"),
+                cd!("Diamonds Three"),
+                cd!("Diamonds Four"),
+                cd!("Diamonds Five"),
+                cd!("Diamonds Six"),
+                cd!("Diamonds Seven"),
+                cd!("Diamonds Eight"),
+                cd!("Diamonds Nine"),
+                cd!("Diamonds Ten"),
+                cd!("Diamonds Jack"),
+                cd!("Diamonds Queen"),
+                cd!("Diamonds King"),
+            ],
+        ];
+        let exp_targets = [None, None, None, None];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets,)
+    }
+
+    #[test]
+    fn targets_almost_full_out_of_order() {
+        let foundation = [
+            [
+                cd!("Spades Ace"),
+                cd!("Spades Two"),
+                cd!("Spades Three"),
+                cd!("Spades Four"),
+                cd!("Spades Five"),
+                cd!("Spades Six"),
+                cd!("Spades Seven"),
+                cd!("Spades Eight"),
+                cd!("Spades Nine"),
+                cd!("Spades Ten"),
+                cd!("Spades Jack"),
+                cd!("Spades Queen"),
+                cd!("Spades King"),
+            ],
+            [
+                cd!("Hearts Ace"),
+                cd!("Hearts Two"),
+                cd!("Hearts Three"),
+                cd!("Hearts Four"),
+                cd!("Hearts Five"),
+                cd!("Hearts Six"),
+                cd!("Hearts Seven"),
+                cd!("Hearts Eight"),
+                cd!("Hearts Nine"),
+                cd!("Hearts Ten"),
+                cd!("Hearts Jack"),
+                cd!("Hearts Queen"),
+                None,
+            ],
+            [
+                cd!("Clubs Ace"),
+                cd!("Clubs Two"),
+                cd!("Clubs Three"),
+                cd!("Clubs Four"),
+                cd!("Clubs Five"),
+                cd!("Clubs Six"),
+                cd!("Clubs Seven"),
+                cd!("Clubs Eight"),
+                cd!("Clubs Nine"),
+                cd!("Clubs Ten"),
+                cd!("Clubs Jack"),
+                cd!("Clubs Queen"),
+                cd!("Clubs King"),
+            ],
+            [
+                cd!("Diamonds Ace"),
+                cd!("Diamonds Two"),
+                cd!("Diamonds Three"),
+                cd!("Diamonds Four"),
+                cd!("Diamonds Five"),
+                cd!("Diamonds Six"),
+                cd!("Diamonds Seven"),
+                cd!("Diamonds Eight"),
+                cd!("Diamonds Nine"),
+                cd!("Diamonds Ten"),
+                cd!("Diamonds Jack"),
+                cd!("Diamonds Queen"),
+                cd!("Diamonds King"),
+            ],
+        ];
+        let exp_targets = [None, ccd!("Hearts King", fd!(1, 12)), None, None];
+
+        let (_, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets)
+    }
+
+    #[test]
+    fn targets_middle_numbers_out_of_order() {
+        let foundation = [
+            [
+                cd!("Spades Ace"),
+                cd!("Spades Two"),
+                cd!("Spades Three"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            [
+                cd!("Hearts Ace"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            [
+                cd!("Clubs Ace"),
+                cd!("Clubs Two"),
+                cd!("Clubs Three"),
+                cd!("Clubs Four"),
+                cd!("Clubs Five"),
+                cd!("Clubs Six"),
+                cd!("Clubs Seven"),
+                cd!("Clubs Eight"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            [
+                cd!("Diamonds Ace"),
+                cd!("Diamonds Two"),
+                cd!("Diamonds Three"),
+                cd!("Diamonds Four"),
+                cd!("Diamonds Five"),
+                cd!("Diamonds Six"),
+                cd!("Diamonds Seven"),
+                cd!("Diamonds Eight"),
+                cd!("Diamonds Nine"),
+                cd!("Diamonds Ten"),
+                cd!("Diamonds Jack"),
+                None,
+                None,
+            ],
+        ];
+        let exp_targets = [
+            ccd!("Spades Four", fd!(0, 3)),
+            ccd!("Hearts Two", fd!(1, 1)),
+            ccd!("Clubs Nine", fd!(2, 8)),
+            ccd!("Diamonds Queen", fd!(3, 11)),
+        ];
+        let exp_available = [Some(2), Some(0), Some(7), Some(10)];
+
+        let (available, targets) = foundation_targets(&foundation);
+        assert_eq!(targets, exp_targets);
+        assert_eq!(available, exp_available)
     }
 }
