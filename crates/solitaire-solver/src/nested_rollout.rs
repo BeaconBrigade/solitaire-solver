@@ -9,7 +9,7 @@ use crate::{
 
 pub struct NestedRolloutSolver {
     eval_caches: Vec<LruCache<State, Eval>>,
-    move_caches: LruCache<State, Vec<Action>>,
+    move_cache: LruCache<State, Vec<Action>>,
     max_depth: usize,
     greedy: GreedySolver,
 }
@@ -21,7 +21,7 @@ impl NestedRolloutSolver {
                 std::iter::repeat_with(|| LruCache::new(NonZeroUsize::new(capacity).unwrap()))
                     .take(max_depth),
             ),
-            move_caches: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
+            move_cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
             max_depth,
             greedy: GreedySolver::new(1),
         }
@@ -30,7 +30,7 @@ impl NestedRolloutSolver {
     pub fn eval(&mut self, root_path: &mut RootPath, mut state: State, depth: usize) -> Eval {
         // depth zero falls back to greedy
         if depth == self.max_depth {
-            return self.greedy.eval(root_path, state, &mut self.move_caches);
+            return self.greedy.eval(root_path, state, &mut self.move_cache);
         }
         if let Some(eval) = self.eval_caches[depth].get(&state) {
             return *eval;
@@ -92,11 +92,7 @@ impl Solver for NestedRolloutSolver {
             if root_path.contains(&new) {
                 continue;
             }
-            // let eval = if let Some(eval) = self.caches[0].get(&new) {
-            //     *eval
-            // } else {
             let eval = self.eval(root_path, new, 0);
-            // };
 
             // self.caches[0].put(new, eval);
             if eval > max.0 {
