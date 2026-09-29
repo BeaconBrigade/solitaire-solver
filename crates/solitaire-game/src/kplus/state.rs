@@ -146,7 +146,7 @@ impl State {
 
     /// order the tableau piles. useful for reducing state space for solving
     /// but not necessary for human play
-    fn sort_piles(&mut self) {
+    pub fn sort_piles(&mut self) {
         self.tableau.sort();
     }
 

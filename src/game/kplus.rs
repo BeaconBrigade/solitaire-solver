@@ -1,7 +1,13 @@
 use macroquad::prelude::*;
 use macroquad::ui::root_ui;
+use solitaire_solver::{move_generation::generate_moves, RootPath, Solver};
 
-use std::{cmp::min, collections::HashMap};
+use std::{
+    cmp::min,
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
+};
 
 use solitaire_game::{
     common::{find_last_idx, Location},
@@ -16,6 +22,7 @@ use crate::{
     OVERLAP_OFFSET, SCREEN_WIDTH, TABLEAU_START,
 };
 
+#[derive(Clone)]
 pub struct KPlusGame {
     pub game: KPlusSolitaire,
 
@@ -28,11 +35,14 @@ pub struct KPlusGame {
     card_textures: HashMap<Card, Texture2D>,
     blank_texture: Texture2D,
 
-    positions: Vec<KPlusSolitaire>,
+    root_path: RootPath,
+
+    solver_move: Option<Arc<JoinHandle<Option<Action>>>>,
+    solver: Arc<Mutex<Box<dyn Solver + Send>>>,
 }
 
 impl KPlusGame {
-    pub async fn new(deck: Deck) -> Self {
+    pub async fn new(deck: Deck, solver: Box<dyn Solver + Send>) -> Self {
         let card_textures = initialize_card_textures().await;
         let blank_texture = load_texture(image::BLANK)
             .await
@@ -47,6 +57,9 @@ impl KPlusGame {
         let game = KPlusSolitaire::with_deck(deck);
         let card_data = initialize_card_data(&game);
 
+        let mut root_path = RootPath::new();
+        root_path.insert(game.state);
+
         Self {
             game,
             card_textures,
@@ -56,13 +69,15 @@ impl KPlusGame {
             dragged_list: [None; 13],
             cursor_offset: Vec2::ZERO,
             card_data,
-            positions: Vec::from([game]),
+            root_path,
+            solver_move: None,
+            solver: Arc::new(Mutex::new(solver)),
         }
     }
 
-    pub fn draw_frame_and_keep_playing(&mut self) -> bool {
+    pub fn draw_frame_and_keep_playing(&mut self) -> SolveUserAction {
         if is_key_pressed(KeyCode::Escape) {
-            return false;
+            return SolveUserAction::Menu;
         }
         if root_ui().button(
             Vec2 {
@@ -71,7 +86,7 @@ impl KPlusGame {
             },
             "Menu",
         ) {
-            return false;
+            return SolveUserAction::Menu;
         }
         if root_ui().button(
             Vec2 {
@@ -80,8 +95,8 @@ impl KPlusGame {
             },
             "Undo",
         ) {
-            if let Some(game) = self.positions.pop() {
-                self.game = game;
+            if let Some(game) = self.root_path.pop() {
+                self.game.state = game;
             }
             update_all_clickable(&self.game, &mut self.card_data);
         }
@@ -92,12 +107,21 @@ impl KPlusGame {
             },
             "Restart",
         ) {
-            if let Some(game) = self.positions.first().copied() {
-                self.game = game;
-                self.positions.clear();
-                self.positions.push(game);
+            if let Some(game) = self.root_path.first().copied() {
+                self.game.state = game;
+                self.root_path.clear();
+                self.root_path.insert(game);
                 self.card_data = initialize_card_data(&self.game);
             }
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 300.0,
+                y: 10.0,
+            },
+            "Solver",
+        ) {
+            return SolveUserAction::Solve;
         }
 
         // update stuff:
@@ -184,7 +208,7 @@ impl KPlusGame {
                     let prev = self.game;
                     self.game.do_move(Action::new(from_coord, to_coord));
                     if self.game != prev {
-                        self.positions.push(prev);
+                        self.root_path.insert(prev.state);
                     }
                     break;
                 }
@@ -203,7 +227,12 @@ impl KPlusGame {
             self.dragged_root = None;
         }
         clear_list(&mut self.dragged_list);
+        self.draw_game();
 
+        SolveUserAction::None
+    }
+
+    fn draw_game(&mut self) {
         // draw the talon
         let talon = &self.game.state.talon;
         let mut x_offset = 0.0;
@@ -346,9 +375,123 @@ impl KPlusGame {
                 self.params.clone(),
             );
         }
-
-        true
     }
+
+    /// Mode where the game is viewed and the user watches the solver play
+    /// or can take it over if they want.
+    pub fn solve_game_and_keep_playing(&mut self) -> SolveUserAction {
+        if is_key_pressed(KeyCode::Escape) {
+            // fix the zones after the computer messed them all up
+            update_all_clickable(&self.game, &mut self.card_data);
+            self.solver_move = None;
+            return SolveUserAction::Menu;
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 40.0,
+                y: 10.0,
+            },
+            "Menu",
+        ) {
+            update_all_clickable(&self.game, &mut self.card_data);
+            self.solver_move = None;
+            return SolveUserAction::Menu;
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 100.0,
+                y: 10.0,
+            },
+            "Undo",
+        ) {
+            if let Some(game) = self.root_path.pop() {
+                self.game.state = game;
+                self.solver_move = None;
+            }
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 200.0,
+                y: 10.0,
+            },
+            "Restart",
+        ) {
+            if let Some(game) = self.root_path.first().copied() {
+                self.game.state = game;
+                self.root_path.clear();
+                self.root_path.insert(game);
+                self.card_data = initialize_card_data(&self.game);
+                self.solver_move = None;
+            }
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 300.0,
+                y: 10.0,
+            },
+            "Start playing",
+        ) {
+            // make sure the clickable is up to date
+            update_all_clickable(&self.game, &mut self.card_data);
+            // terminate search
+            self.solver_move = None;
+            return SolveUserAction::Play;
+        }
+
+        let text = if self.solver_move.is_none() {
+            "Generate move"
+        } else {
+            "Move generating"
+        };
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 450.0,
+                y: 10.0,
+            },
+            text,
+        ) && self.solver_move.is_none()
+        {
+            // trust me I won't double race
+            self.game.state.sort_piles();
+            // we need to have a way to unsort the piles for display
+            let s = self.game.state.clone();
+            let mut rp = self.root_path.clone();
+            let solver = self.solver.clone();
+            // start move generation
+            self.solver_move = Some(Arc::new(thread::spawn(move || {
+                solver
+                    .lock()
+                    .unwrap()
+                    .next_move(&mut rp, &s, &generate_moves(&s))
+            })));
+        }
+        // check if the move has finished computing
+        if let Some(handle) = &self.solver_move {
+            if handle.is_finished() {
+                // we should be the only one holding our handle after the Option::take
+                let handle = Arc::try_unwrap(self.solver_move.take().unwrap()).unwrap();
+                let res = handle.join();
+                if let Ok(Some(a)) = res {
+                    self.game.do_move_sorted(a);
+                    // TODO: need to handle sorting
+                    // a = unsort(a)
+                    // self.game.do_move(a);
+                    self.root_path.insert(self.game.state);
+                }
+            }
+        }
+
+        self.draw_game();
+
+        SolveUserAction::None
+    }
+}
+
+pub enum SolveUserAction {
+    Menu,
+    Play,
+    Solve,
+    None,
 }
 
 #[derive(Debug, Default, Clone, Copy)]

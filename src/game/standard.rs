@@ -1,6 +1,7 @@
 //! This is just normal solitaire with the face down cards
 
 use crate::clear_list;
+use crate::game::kplus::SolveUserAction;
 use crate::push_first;
 use crate::COVERED_CARD_SIZE;
 use crate::DROP_MAP;
@@ -28,6 +29,7 @@ use crate::{
     CARD_SIZE,
 };
 
+#[derive(Clone)]
 pub struct StandardGame {
     pub game: Solitaire,
 
@@ -78,9 +80,9 @@ impl StandardGame {
         }
     }
 
-    pub fn draw_frame_and_keep_playing(&mut self) -> bool {
+    pub fn draw_frame_and_keep_playing(&mut self) -> SolveUserAction {
         if is_key_pressed(KeyCode::Escape) {
-            return false;
+            return SolveUserAction::Menu;
         }
         if root_ui().button(
             Vec2 {
@@ -89,7 +91,7 @@ impl StandardGame {
             },
             "Menu",
         ) {
-            return false;
+            return SolveUserAction::Menu;
         }
         if root_ui().button(
             Vec2 {
@@ -500,7 +502,7 @@ impl StandardGame {
             );
         }
 
-        true
+        SolveUserAction::None
     }
 }
 

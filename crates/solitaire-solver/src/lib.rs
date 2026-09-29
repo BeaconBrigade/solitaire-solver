@@ -85,7 +85,7 @@ pub trait Solver {
 }
 
 /// Vec + HashSet to keep track of visited states without having to clone a ton
-#[derive(Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RootPath {
     history: Vec<State>,
     visited: FxHashSet<State>,
@@ -111,14 +111,24 @@ impl RootPath {
         self.visited.insert(state);
     }
 
+    /// Pop the most recent state if there was one
+    pub fn pop(&mut self) -> Option<State> {
+        let s = self.history.pop()?;
+        self.visited.remove(&s);
+        Some(s)
+    }
+
+    pub fn first(&mut self) -> Option<&State> {
+        self.history.first()
+    }
+
+    pub fn clear(&mut self) {
+        self.rollback_to(0)
+    }
+
     pub fn rollback_to(&mut self, horizon: usize) {
-        let l = self.len();
-        for _ in horizon..l {
-            let s = self
-                .history
-                .pop()
-                .expect("i<self.len() so pop should always have an element");
-            self.visited.remove(&s);
+        for _ in horizon..self.len() {
+            let _ = self.pop().expect("only pops when horizon < len()");
         }
     }
 
@@ -129,11 +139,9 @@ impl RootPath {
         cache: &mut LruCache<State, Eval>,
         eval: Eval,
     ) {
-        let l = self.len();
-        for _ in horizon..l {
-            let s = self.history.pop().unwrap();
+        for _ in horizon..self.len() {
+            let s = self.pop().expect("only pops when horizon < len()");
             cache.put(s, eval);
-            self.visited.remove(&s);
         }
     }
 }

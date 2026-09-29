@@ -162,8 +162,6 @@ fn find_moves(
 /// this changes the output of generate_moves from the old version.
 ///
 /// Assumes the piles are filled from left to right.
-// TODO: turn this to only put the first ace, since the rest are implied.
-//       this would match what the old algorithm did
 fn foundation_targets(
     foundation: &[[Option<Card>; 13]; 4],
 ) -> ([Option<usize>; 4], [Option<(Card, Coord)>; 4]) {

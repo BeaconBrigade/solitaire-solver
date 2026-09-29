@@ -18,8 +18,12 @@ use solitaire_game::{
     common::{Coord, Location},
     deck::{Card, Deck},
 };
+use solitaire_solver::{greedy::GreedySolver, nested_rollout::NestedRolloutSolver};
 
-use crate::game::{kplus::KPlusGame, standard::StandardGame};
+use crate::game::{
+    kplus::{KPlusGame, SolveUserAction},
+    standard::StandardGame,
+};
 
 fn window_conf() -> Conf {
     Conf {
@@ -44,6 +48,9 @@ async fn main() {
     let mut error_message: Option<String> = None;
     let mut next_mode = None;
     let mut save_path = "decks/".to_string();
+    let mut selected_solver = 1;
+    const SOLVER_OPTIONS: &[&str; 2] = &["Greedy", "Nested"];
+    let mut nesting_level = 1;
 
     loop {
         let background_colour = color_u8!(5, 133, 3, 255);
@@ -108,6 +115,22 @@ async fn main() {
                                 &mut selected_source,
                             );
                             ui.separator();
+                            ui.combo_box(
+                                hash!(),
+                                "Solver method",
+                                SOLVER_OPTIONS,
+                                &mut selected_solver,
+                            );
+                            ui.separator();
+                            if selected_solver > 0 {
+                                ui.combo_box(
+                                    hash!(),
+                                    "Nest level",
+                                    &["0", "1", "2"],
+                                    &mut nesting_level,
+                                );
+                            }
+                            ui.separator();
                             ui.input_text(hash!(), "Deck file path", &mut deck_path);
                             if ui.button(None, "Standard Solitaire") {
                                 let already = already_playing.borrow_mut();
@@ -147,20 +170,62 @@ async fn main() {
                                     next_mode = Some(already_playing.replace(Mode::Menu));
                                 } else if selected_source == 0 {
                                     let deck = Deck::new_shuffled();
-                                    // oh yeah, async baby
-                                    next_mode = Some(Mode::Game(
-                                        Box::new(K(executor::block_on(KPlusGame::new(deck)))),
-                                        deck,
-                                    ));
+                                    match selected_solver {
+                                        0 => {
+                                            next_mode = Some(Mode::Game(
+                                                // oh yeah, async baby
+                                                Box::new(K(executor::block_on(KPlusGame::new(
+                                                    deck,
+                                                    Box::new(GreedySolver::new(50_000)),
+                                                )))),
+                                                deck,
+                                            ));
+                                        }
+                                        1 => {
+                                            next_mode = Some(Mode::Game(
+                                                Box::new(K(executor::block_on(KPlusGame::new(
+                                                    deck,
+                                                    Box::new(NestedRolloutSolver::new(
+                                                        50_000,
+                                                        nesting_level,
+                                                    )),
+                                                )))),
+                                                deck,
+                                            ));
+                                        }
+                                        _ => panic!("invalid solver"),
+                                    }
                                 } else {
                                     // find a file
                                     match read_deck(&deck_path) {
-                                        Ok(d) => {
-                                            next_mode = Some(Mode::Game(
-                                                Box::new(K(executor::block_on(KPlusGame::new(d)))),
-                                                d,
-                                            ));
-                                        }
+                                        Ok(d) => match selected_solver {
+                                            0 => {
+                                                next_mode = Some(Mode::Game(
+                                                    Box::new(K(executor::block_on(
+                                                        KPlusGame::new(
+                                                            d,
+                                                            Box::new(GreedySolver::new(50_000)),
+                                                        ),
+                                                    ))),
+                                                    d,
+                                                ));
+                                            }
+                                            1 => {
+                                                next_mode = Some(Mode::Game(
+                                                    Box::new(K(executor::block_on(
+                                                        KPlusGame::new(
+                                                            d,
+                                                            Box::new(NestedRolloutSolver::new(
+                                                                50_000,
+                                                                nesting_level,
+                                                            )),
+                                                        ),
+                                                    ))),
+                                                    d,
+                                                ));
+                                            }
+                                            _ => panic!("invalid solver"),
+                                        },
                                         Err(e) => {
                                             error_message = Some(e);
                                         }
@@ -181,12 +246,29 @@ async fn main() {
                         });
                 }
             }
-            Mode::Game(game, _) => {
-                if !game.draw_frame_and_keep_playing() {
+            Mode::Game(game, deck) => match game.draw_frame_and_keep_playing() {
+                SolveUserAction::Menu => {
                     already_playing = Rc::new(RefCell::new(mode));
                     mode = Mode::Menu;
                 }
-            }
+                SolveUserAction::Solve => {
+                    let K(game) = &**game else {
+                        panic!("game was standard version");
+                    };
+                    next_mode = Some(Mode::Solve(game.clone(), *deck))
+                }
+                SolveUserAction::None | SolveUserAction::Play => {}
+            },
+            Mode::Solve(game, deck) => match game.solve_game_and_keep_playing() {
+                SolveUserAction::Menu => {
+                    already_playing = Rc::new(RefCell::new(mode));
+                    mode = Mode::Menu;
+                }
+                SolveUserAction::Play => {
+                    next_mode = Some(Mode::Game(Box::new(K(game.clone())), *deck));
+                }
+                SolveUserAction::None | SolveUserAction::Solve => {}
+            },
         }
 
         next_frame().await;
@@ -210,15 +292,17 @@ fn save_deck(path: &str, deck: Deck) -> Result<(), String> {
 enum Mode {
     Menu,
     Game(Box<Game>, Deck),
+    Solve(KPlusGame, Deck),
 }
 
+#[derive(Clone)]
 enum Game {
     S(StandardGame),
     K(KPlusGame),
 }
 
 impl Game {
-    fn draw_frame_and_keep_playing(&mut self) -> bool {
+    fn draw_frame_and_keep_playing(&mut self) -> SolveUserAction {
         match self {
             Game::S(s) => s.draw_frame_and_keep_playing(),
             Game::K(k) => k.draw_frame_and_keep_playing(),
