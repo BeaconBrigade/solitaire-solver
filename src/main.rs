@@ -164,7 +164,7 @@ async fn main() {
                             }
                             if ui.button(None, "KPlus Solitaire") {
                                 let already = already_playing.borrow_mut();
-                                if matches!(*already, Mode::Game(_, _)) {
+                                if matches!(*already, Mode::Game(_, _) | Mode::Solve(_, _)) {
                                     // load bearing drop
                                     drop(already);
                                     next_mode = Some(already_playing.replace(Mode::Menu));
@@ -233,7 +233,7 @@ async fn main() {
                                 }
                             }
                             let already = already_playing.borrow();
-                            if let Mode::Game(_, deck) = *already {
+                            if let Mode::Game(_, deck) | Mode::Solve(_, deck) = *already {
                                 ui.input_text(hash!(), "Save deck path", &mut save_path);
                                 if ui.button(None, "Clear previous game") {
                                     // also a load bearing drop
