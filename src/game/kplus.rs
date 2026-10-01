@@ -37,7 +37,9 @@ pub struct KPlusGame {
 
     root_path: RootPath,
 
-    solver_move: Option<Arc<JoinHandle<Option<Action>>>>,
+    /// contains the thread searching for a move and a boolean to indicate if the engine
+    /// should continue solving after a move is found.
+    solver_move: Option<(bool, Arc<JoinHandle<Option<Action>>>)>,
     solver: Arc<Mutex<Box<dyn Solver + Send>>>,
 }
 
@@ -438,7 +440,7 @@ impl KPlusGame {
             return SolveUserAction::Play;
         }
 
-        let text = if self.solver_move.is_none() {
+        let one_move_text = if self.solver_move.is_none() {
             "Generate move"
         } else {
             "Move generating"
@@ -448,7 +450,7 @@ impl KPlusGame {
                 x: SCREEN_WIDTH as f32 - 450.0,
                 y: 10.0,
             },
-            text,
+            one_move_text,
         ) && self.solver_move.is_none()
         {
             // trust me I won't double race
@@ -458,18 +460,23 @@ impl KPlusGame {
             let mut rp = self.root_path.clone();
             let solver = self.solver.clone();
             // start move generation
-            self.solver_move = Some(Arc::new(thread::spawn(move || {
-                solver
-                    .lock()
-                    .unwrap()
-                    .next_move(&mut rp, &s, &generate_moves(&s))
-            })));
+            self.solver_move = Some((
+                false,
+                Arc::new(thread::spawn(move || {
+                    solver
+                        .lock()
+                        .unwrap()
+                        .next_move(&mut rp, &s, &generate_moves(&s))
+                })),
+            ));
         }
+        let mut all_move_text = "Play out game";
         // check if the move has finished computing
-        if let Some(handle) = &self.solver_move {
+        if let Some((keep_playing, handle)) = &self.solver_move {
             if handle.is_finished() {
                 // we should be the only one holding our handle after the Option::take
-                let handle = Arc::try_unwrap(self.solver_move.take().unwrap()).unwrap();
+                let keep_playing = *keep_playing; // load bearing copy
+                let handle = Arc::try_unwrap(self.solver_move.take().unwrap().1).unwrap();
                 let res = handle.join();
                 if let Ok(Some(a)) = res {
                     self.game.do_move_sorted(a);
@@ -478,6 +485,60 @@ impl KPlusGame {
                     // self.game.do_move(a);
                     self.root_path.insert(self.game.state);
                 }
+
+                // start looking for a new move also, no need to sort the piles because our player
+                // sorts the piles.
+                if keep_playing && !self.game.state.is_win() {
+                    let s = self.game.state.clone();
+                    let mut rp = self.root_path.clone();
+                    let solver = self.solver.clone();
+                    self.solver_move = Some((
+                        true,
+                        Arc::new(thread::spawn(move || {
+                            solver
+                                .lock()
+                                .unwrap()
+                                .next_move(&mut rp, &s, &generate_moves(&s))
+                        })),
+                    ));
+                }
+            } else {
+                // we're not done
+                if *keep_playing {
+                    all_move_text = "Stop playing";
+                } else {
+                    all_move_text = "Continue playing";
+                }
+            }
+        }
+        if root_ui().button(
+            Vec2 {
+                x: SCREEN_WIDTH as f32 - 600.0,
+                y: 10.0,
+            },
+            all_move_text,
+        ) {
+            // switch between continuing playing or stopping after this move
+            if let Some((keep_playing, _)) = &mut self.solver_move {
+                *keep_playing = !*keep_playing;
+            } else {
+                // this is a pure copy paste
+                // trust me I won't double race
+                self.game.state.sort_piles();
+                // we need to have a way to unsort the piles for display
+                let s = self.game.state.clone();
+                let mut rp = self.root_path.clone();
+                let solver = self.solver.clone();
+                // start move generation
+                self.solver_move = Some((
+                    true,
+                    Arc::new(thread::spawn(move || {
+                        solver
+                            .lock()
+                            .unwrap()
+                            .next_move(&mut rp, &s, &generate_moves(&s))
+                    })),
+                ));
             }
         }
 
