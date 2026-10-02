@@ -126,6 +126,15 @@ impl KPlusGame {
             return SolveUserAction::Solve;
         }
 
+        // draw how many moves this has taken (not including undos)
+        draw_text(
+            &format!("Move {}", self.root_path.len()),
+            SCREEN_WIDTH as f32 - 750.0,
+            25.0,
+            20.0,
+            WHITE,
+        );
+
         // update stuff:
         // we don't have a turn stock action anymore so we don't have to
         // worry about a button or turn stock
@@ -399,13 +408,15 @@ impl KPlusGame {
             self.solver_move = None;
             return SolveUserAction::Menu;
         }
+        // don't undo while the solver is making a move
+        // could maybe cause an invalid action to be attempted
         if root_ui().button(
             Vec2 {
                 x: SCREEN_WIDTH as f32 - 100.0,
                 y: 10.0,
             },
             "Undo",
-        ) {
+        ) && self.solver_move.is_none() {
             if let Some(game) = self.root_path.pop() {
                 self.game.state = game;
                 self.solver_move = None;
@@ -541,6 +552,16 @@ impl KPlusGame {
                 ));
             }
         }
+
+        // draw how many moves this has taken (not including undos)
+        draw_text(
+            &format!("Move {}", self.root_path.len()),
+            SCREEN_WIDTH as f32 - 750.0,
+            25.0,
+            20.0,
+            WHITE,
+        );
+
 
         self.draw_game();
 
