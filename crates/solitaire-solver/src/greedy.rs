@@ -13,9 +13,7 @@ pub struct GreedySolver {
 
 impl GreedySolver {
     pub fn new(_capacity: usize, h: fn(&State, &[Action]) -> isize) -> Self {
-        Self {
-            h
-        }
+        Self { h }
     }
 
     pub fn eval(
