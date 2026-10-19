@@ -16,7 +16,7 @@ use crate::move_generation::generate_moves;
 pub mod greedy;
 pub mod heuristic;
 pub mod move_generation;
-// pub mod multistage_nested_rollout;
+pub mod multistage_nested_rollout;
 pub mod nested_rollout;
 
 #[derive(Debug)]

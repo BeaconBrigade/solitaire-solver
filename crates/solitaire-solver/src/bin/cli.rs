@@ -9,7 +9,11 @@ use std::{
 
 use solitaire_game::{deck::Deck, kplus::KPlusSolitaire};
 use solitaire_solver::{
-    greedy::GreedySolver, nested_rollout::NestedRolloutSolver, Solution, Solver,
+    greedy::GreedySolver,
+    heuristic::{h1, h2},
+    multistage_nested_rollout::MultistageNestedRolloutSolver,
+    nested_rollout::NestedRolloutSolver,
+    Solution, Solver,
 };
 
 fn main() {
@@ -43,7 +47,7 @@ fn main() {
             let mut arg = args.next();
             let json = matches!(arg.as_deref(), Some("-j") | Some("--json"));
             let mut n = None;
-            if method == "nested" {
+            if method == "nested" || method == "multistage" {
                 if json {
                     arg = args.next();
                 }
@@ -127,17 +131,18 @@ fn solve(deck: String, method: String, json: bool, n: Option<Vec<usize>>) {
             let depth = n.unwrap_or(vec![1])[0];
             (now, NestedRolloutSolver::new(50_000, depth).play_game(game))
         }
-        // "multistage" => {
-        //     let now = Instant::now();
-        //     (
-        //         now,
-        //         multistage_rollout_solve(
-        //             game,
-        //             &n.map(|n| [n[0], n[1]]).unwrap_or([2, 1]),
-        //             &[&h1, &h2],
-        //         ),
-        //     )
-        // }
+        "multistage" => {
+            let now = Instant::now();
+            (
+                now,
+                MultistageNestedRolloutSolver::new(
+                    50_000,
+                    n.map(|n| [n[0], n[1]]).unwrap_or([1, 1]),
+                    [h1, h2],
+                )
+                .play_game(game),
+            )
+        }
         _ => {
             print_method_not_found();
             return;

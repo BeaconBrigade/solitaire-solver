@@ -1,194 +1,141 @@
-use std::{array, collections::HashMap, num::NonZeroUsize};
+use std::{array, num::NonZeroUsize};
 
 use lru::LruCache;
-use solitaire_game::kplus::{KPlusSolitaire, action::Action, state::State};
+use solitaire_game::kplus::{action::Action, state::State};
 
-use crate::{Eval, Solution, greedy::greedy, move_generation::generate_moves};
+use crate::{move_generation::generate_moves, Eval, RootPath, Solver};
 
-/// Multistage rollout algorithm from Bjarnason
-/// H: number of stages
-/// n: nest level for each stage
-/// heuristics: the heuristics for each stage
-pub fn multistage_rollout_solve<const H: usize>(
-    mut game: KPlusSolitaire,
-    n: &[usize; H],
-    heuristics: &[&dyn Fn(&State, &[Action]) -> isize; H],
-) -> Option<Solution> {
-    if game.state.is_win() {
-        return Some(Solution { moves: Vec::new() });
-    }
-    let mut moves = Vec::new();
-    let mut actions = generate_moves(&game.state);
-    let mut caches: [Vec<LruCache<State, (), _>>; H] = array::from_fn(|_| Vec::new());
-    let mut caches: Vec<&mut Vec<LruCache<State, (), _>>> = caches.iter_mut().collect();
-    let mut root_path = HashMap::new();
-    // array of caches for each stage
-    for (c, n) in caches.iter_mut().zip(n.iter().copied()) {
-        for _ in 0..n {
-            c.push(LruCache::new(NonZeroUsize::new(50_000).unwrap()));
-        }
-    }
-    while !game.state.is_win() && !actions.is_empty() {
-        let mut max = (Eval::Loss, None);
-        root_path.insert(game.state, (0, n[0]));
-        for a in actions {
-            let next = game.state.apply(a);
-            // if caches[0].get(&next).is_some() {
-            //     continue;
-            // }
-            let eval = multistage_nested_rollout(
-                next,
-                0,
-                &mut caches,
-                n.to_vec(),
-                heuristics,
-                root_path.clone(),
-            );
-            if max.0 < eval {
-                max = (eval, Some(a));
-            }
-        }
-        match max.0 {
-            Eval::Win(mut actions) => {
-                moves.push(max.1.unwrap());
-                moves.append(&mut actions);
-                return Some(Solution { moves });
-            }
-            Eval::Loss => return None,
-            Eval::H(_) => {}
-        }
-        game.do_move(max.1.unwrap());
-        // caches[0][n[0]-1].put(game.state, ());
-        moves.push(max.1.unwrap());
-        actions = generate_moves(&game.state);
-    }
-
-    if game.state.is_win() {
-        Some(Solution { moves })
-    } else {
-        None
-    }
+pub struct MultistageNestedRolloutSolver<const N: usize> {
+    eval_caches: [Vec<LruCache<State, Eval>>; N],
+    heuristics: [fn(&State, &[Action]) -> isize; N],
+    move_cache: LruCache<State, Vec<Action>>,
+    max_depth: [usize; N],
 }
 
-// used for getting state hashes to see if states are repeating
-#[allow(unused)]
-macro_rules! hash {
-    ($x:ident) => {
-        {
-            use std::hash::{Hash, Hasher};
-            let mut hasher = std::hash::DefaultHasher::new();
-            $x.hash(&mut hasher);
-            hasher.finish()
-        }
-    };
-}
-
-fn multistage_nested_rollout(
-    start: State,
-    stage: usize,
-    caches: &mut [&mut Vec<LruCache<State, ()>>],
-    n: Vec<usize>,
-    heuristics: &[&dyn Fn(&State, &[Action]) -> isize],
-    // has (stage, n) pair
-    mut root_path: HashMap<State, (usize, usize)>,
-) -> Eval {
-    let mut state = start;
-    if state.is_win() {
-        return Eval::Win(Vec::new());
-    } else if root_path.get(&state).copied() == Some((stage, n[0])) {
-        // we're in an infinite loop
-        return Eval::Loss;
-    }
-
-    let mut actions = generate_moves(&state);
-    if actions.is_empty() {
-        return Eval::H(heuristics[0](&state, &actions));
-    }
-    let mut moves = Vec::new();
-
-    // return heuristic when we're out of levels
-    if n[0] == 0 {
-        let res = greedy(state, root_path, heuristics[0]);
-        return res;
-    }
-
-    if n[0] != usize::MAX && caches[0][n[0] - 1].contains(&state) {
-        // if this is the last heuristic
-        if n.len() == 1 {
-            return Eval::H(heuristics[0](&state, &actions));
-        } else {
-            return multistage_nested_rollout(
-                state,
-                stage + 1,
-                &mut caches[1..],
-                n[1..].to_vec(),
-                &heuristics[1..],
-                root_path,
-            );
+impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
+    pub fn new(
+        capacity: usize,
+        max_depth: [usize; N],
+        heuristics: [fn(&State, &[Action]) -> isize; N],
+    ) -> Self {
+        Self {
+            eval_caches: array::from_fn(|i| {
+                Vec::from_iter(
+                    std::iter::repeat_with(|| LruCache::new(NonZeroUsize::new(capacity).unwrap()))
+                        .take(max_depth[i] + 1),
+                )
+            }),
+            heuristics,
+            move_cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
+            max_depth,
         }
     }
 
-    let result = loop {
-        if !state.is_win() && actions.is_empty() {
-            break Eval::H(heuristics[0](&state, &actions));
-        }
-        root_path.insert(state, (stage, n[0]));
-        let mut max = (Eval::Loss, None);
-        for a in &actions {
-            let next = state.apply(*a);
-            let mut q = n.clone();
-            q[0] -= 1;
-            let eval =
-                multistage_nested_rollout(next, stage, caches, q, heuristics, root_path.clone());
-            // use the 'or' so if there's at least one move even if it results
-            // in a loss, it is stored there
-            if max.0 < eval || max.0 == Eval::Loss {
-                max = (eval, Some(*a));
+    pub fn eval(
+        &mut self,
+        root_path: &mut RootPath,
+        mut state: State,
+        depth: usize,
+        // which heuristic we're on
+        h: usize,
+    ) -> Eval {
+        if let Some(eval) = self.eval_caches[h][depth].get(&state) {
+            // no more heuristics, use cached value
+            if h + 1 == N {
+                return *eval;
+            } else {
+                // use next heuristic
+                return self.eval(root_path, state, 0, h + 1);
             }
         }
-        match max {
-            (Eval::Win(mut actions), a) => {
-                moves.push(a.unwrap());
-                moves.append(&mut actions);
-                break Eval::Win(moves);
-            }
-            // doesn't matter if we have no moves left or not
-            (Eval::Loss, _) => {
-                // last heuristic
-                if n.len() == 1 {
-                    break Eval::H(heuristics[0](&state, &actions));
+
+        let horizon = root_path.len();
+        while !state.is_win() {
+            root_path.insert(state);
+
+            let mut max = (Eval::Loss, None);
+            // for now, only greedy gets to use the move cache
+            let actions = if depth < self.max_depth[h] {
+                &generate_moves(&state)
+            } else {
+                // safety: don't question it- i'm lazy
+                unsafe {
+                    &*(match self.move_cache.get(&state) {
+                        Some(a) => a,
+                        None => {
+                            let actions = generate_moves(&state);
+                            self.move_cache.put(state, actions);
+                            self.move_cache.get(&state).unwrap()
+                        }
+                    } as *const Vec<Action>)
+                }
+            };
+            for a in actions {
+                let new = state.apply_sorted(*a);
+                // we're repeating states
+                if root_path.contains(&new) {
+                    continue;
+                }
+                let eval = if depth < self.max_depth[h] {
+                    self.eval(root_path, new, depth + 1, h)
                 } else {
-                    break multistage_nested_rollout(
-                        state,
-                        stage + 1,
-                        &mut caches[1..],
-                        n[1..].to_vec(),
-                        &heuristics[1..],
-                        root_path,
-                    );
+                    // if we're at our depth, just be greedy
+                    Eval::H(self.heuristics[h](&state, &actions))
+                };
+                if eval > max.0 {
+                    max = (eval, Some(new));
+                    // early terminate search
+                    if eval == Eval::Win {
+                        break;
+                    }
                 }
             }
-            // same as before, this is for local minimums
-            (Eval::H(h), _) if n.len() > 1 && h < heuristics[0](&state, &actions) => {
-                break multistage_nested_rollout(
-                    state,
-                    stage + 1,
-                    &mut caches[1..],
-                    n[1..].to_vec(),
-                    &heuristics[1..],
-                    root_path,
-                );
+            // check if we have a local minimum and another heuristic
+            // the main difference from normal nested rollouts
+            if h + 1 < N && max.0 < Eval::H(self.heuristics[h](&state, &actions)) {
+                return self.eval(root_path, state, 0, h + 1);
             }
-            _ => {}
+            if let Some(new) = max.1 {
+                state = new;
+            } else {
+                // we ran out of unexplored moves
+                let eval = Eval::H(self.heuristics[h](&state, &actions));
+                root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], eval);
+                return eval;
+            }
         }
 
-        state = state.apply(max.1.unwrap());
-        moves.push(max.1.unwrap());
-        actions = generate_moves(&state);
-    };
-
-    caches[0][n[0] - 1].put(start, ());
-
-    result
+        root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], Eval::Win);
+        Eval::Win
+    }
 }
 
+impl<const N: usize> Solver for MultistageNestedRolloutSolver<N> {
+    fn next_move(
+        &mut self,
+        root_path: &mut RootPath,
+        state: &State,
+        actions: &Vec<Action>,
+    ) -> Option<Action> {
+        let mut max = (Eval::Loss, None);
+        for a in actions {
+            let new = state.apply_sorted(*a);
+            // already been to this state in our path
+            if root_path.contains(&new) {
+                continue;
+            }
+            let eval = self.eval(root_path, new, 0, 0);
+
+            // self.caches[0].put(new, eval);
+            if eval > max.0 {
+                max = (eval, Some(*a));
+                // early break for wins
+                if eval == Eval::Win {
+                    break;
+                }
+            }
+        }
+
+        max.1
+    }
+}

@@ -6,11 +6,16 @@ use solitaire_game::kplus::{action::Action, state::State};
 use crate::{heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver};
 
 /// Solve the game using greedy rollouts
-pub struct GreedySolver {}
+pub struct GreedySolver {
+    // h: &'a dyn Fn(&State, &[Action]) -> isize,
+    h: fn(&State, &[Action]) -> isize,
+}
 
 impl GreedySolver {
-    pub fn new(_capacity: usize) -> Self {
-        Self {}
+    pub fn new(_capacity: usize, h: fn(&State, &[Action]) -> isize) -> Self {
+        Self {
+            h
+        }
     }
 
     pub fn eval(
@@ -41,7 +46,7 @@ impl GreedySolver {
                 }
                 let candidate_moves = generate_moves(&new);
 
-                let h = h2(&new, &candidate_moves);
+                let h = (self.h)(&new, &candidate_moves);
                 if h > max.0 {
                     max = (h, Some(new));
                 }
@@ -51,7 +56,7 @@ impl GreedySolver {
             } else {
                 // we ran out of unexplored moves
                 root_path.rollback_to(horizon);
-                return Eval::H(h2(&state, &actions));
+                return Eval::H((self.h)(&state, &actions));
             }
         }
         root_path.rollback_to(horizon);
@@ -62,7 +67,7 @@ impl GreedySolver {
 
 impl Default for GreedySolver {
     fn default() -> Self {
-        Self::new(50_000)
+        Self::new(50_000, h2)
     }
 }
 

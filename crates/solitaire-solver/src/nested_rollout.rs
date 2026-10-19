@@ -23,7 +23,7 @@ impl NestedRolloutSolver {
             ),
             move_cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
             max_depth,
-            greedy: GreedySolver::new(1),
+            greedy: GreedySolver::new(1, h2),
         }
     }
 
