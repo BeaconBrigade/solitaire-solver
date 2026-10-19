@@ -18,7 +18,7 @@ use solitaire_game::{
     common::{Coord, Location},
     deck::{Card, Deck},
 };
-use solitaire_solver::{greedy::GreedySolver, nested_rollout::NestedRolloutSolver};
+use solitaire_solver::{greedy::GreedySolver, heuristic::h2, nested_rollout::NestedRolloutSolver};
 
 use crate::game::{
     kplus::{KPlusGame, SolveUserAction},
@@ -176,7 +176,7 @@ async fn main() {
                                                 // oh yeah, async baby
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     deck,
-                                                    Box::new(GreedySolver::new(50_000)),
+                                                    Box::new(GreedySolver::new(50_000, h2)),
                                                 )))),
                                                 deck,
                                             ));
@@ -204,7 +204,7 @@ async fn main() {
                                                     Box::new(K(executor::block_on(
                                                         KPlusGame::new(
                                                             d,
-                                                            Box::new(GreedySolver::new(50_000)),
+                                                            Box::new(GreedySolver::new(50_000, h2)),
                                                         ),
                                                     ))),
                                                     d,

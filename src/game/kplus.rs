@@ -416,7 +416,8 @@ impl KPlusGame {
                 y: 10.0,
             },
             "Undo",
-        ) && self.solver_move.is_none() {
+        ) && self.solver_move.is_none()
+        {
             if let Some(game) = self.root_path.pop() {
                 self.game.state = game;
                 self.solver_move = None;
@@ -561,7 +562,6 @@ impl KPlusGame {
             20.0,
             WHITE,
         );
-
 
         self.draw_game();
 
