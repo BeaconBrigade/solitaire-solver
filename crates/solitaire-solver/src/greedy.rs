@@ -5,7 +5,7 @@ use solitaire_game::kplus::{action::Action, state::State};
 
 use crate::{heuristic::h2, move_generation::generate_moves, Eval, RootPath, Solver};
 
-/// Solve the game using greedy rollouts
+/// Solve the game by picking the move with one step heuristic lookahead
 pub struct GreedySolver {
     // h: &'a dyn Fn(&State, &[Action]) -> isize,
     h: fn(&State, &[Action]) -> isize,
@@ -19,47 +19,37 @@ impl GreedySolver {
     pub fn eval(
         &self,
         root_path: &mut RootPath,
-        mut state: State,
+        state: State,
         move_cache: &mut LruCache<State, Vec<Action>>,
     ) -> Eval {
         let horizon = root_path.len();
-        while !state.is_win() {
-            root_path.insert(state);
-
-            let mut max = (isize::MIN, None);
-            let actions = match move_cache.get(&state) {
-                Some(a) => a,
-                None => {
-                    let actions = generate_moves(&state);
-                    move_cache.put(state, actions);
-                    move_cache.get(&state).unwrap()
-                }
-            };
-            // try to get an idea of how useful the move_cache is
-            for a in actions {
-                let new = state.apply_sorted(*a);
-                // we're repeating states
-                if root_path.contains(&new) {
-                    continue;
-                }
-                let candidate_moves = generate_moves(&new);
-
-                let h = (self.h)(&new, &candidate_moves);
-                if h > max.0 {
-                    max = (h, Some(new));
-                }
+        root_path.insert(state);
+        let mut max = (isize::MIN, None);
+        let actions = match move_cache.get(&state) {
+            Some(a) => a,
+            None => {
+                let actions = generate_moves(&state);
+                move_cache.put(state, actions);
+                move_cache.get(&state).unwrap()
             }
-            if let Some(new) = max.1 {
-                state = new;
-            } else {
-                // we ran out of unexplored moves
-                root_path.rollback_to(horizon);
-                return Eval::H((self.h)(&state, &actions));
+        };
+        // try to get an idea of how useful the move_cache is
+        for a in actions {
+            let new = state.apply_sorted(*a);
+            // we're repeating states
+            if root_path.contains(&new) {
+                continue;
+            }
+            let candidate_moves = generate_moves(&new);
+
+            let h = (self.h)(&new, &candidate_moves);
+            if h > max.0 {
+                max = (h, Some(new));
             }
         }
+        // we ran out of unexplored moves
         root_path.rollback_to(horizon);
-
-        Eval::Win
+        Eval::H((self.h)(&state, &actions))
     }
 }
 
@@ -83,9 +73,6 @@ impl Solver for GreedySolver {
             if root_path.contains(&new) {
                 continue;
             }
-            // let h = if let Some(h) = self.cache.get(&new) {
-            //     *h
-            // } else {
             let eval = self.eval(
                 root_path,
                 new,
@@ -96,9 +83,7 @@ impl Solver for GreedySolver {
                 Eval::Win => isize::MAX,
                 Eval::H(h) => h,
             };
-            // };
 
-            // self.cache.put(new, h);
             if h > max.0 {
                 max = (h, Some(*a));
             }
