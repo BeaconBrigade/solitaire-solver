@@ -54,7 +54,6 @@ impl Solver for GreedySolver {
                 continue;
             }
             let eval = self.eval(
-                root_path,
                 new,
                 &mut LruCache::new(NonZeroUsize::new(1).unwrap()),
             );
