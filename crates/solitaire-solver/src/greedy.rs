@@ -18,13 +18,9 @@ impl GreedySolver {
 
     pub fn eval(
         &self,
-        root_path: &mut RootPath,
         state: State,
         move_cache: &mut LruCache<State, Vec<Action>>,
     ) -> Eval {
-        let horizon = root_path.len();
-        root_path.insert(state);
-        let mut max = (isize::MIN, None);
         let actions = match move_cache.get(&state) {
             Some(a) => a,
             None => {
@@ -33,22 +29,6 @@ impl GreedySolver {
                 move_cache.get(&state).unwrap()
             }
         };
-        // try to get an idea of how useful the move_cache is
-        for a in actions {
-            let new = state.apply_sorted(*a);
-            // we're repeating states
-            if root_path.contains(&new) {
-                continue;
-            }
-            let candidate_moves = generate_moves(&new);
-
-            let h = (self.h)(&new, &candidate_moves);
-            if h > max.0 {
-                max = (h, Some(new));
-            }
-        }
-        // we ran out of unexplored moves
-        root_path.rollback_to(horizon);
         Eval::H((self.h)(&state, &actions))
     }
 }

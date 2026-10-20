@@ -30,7 +30,7 @@ impl NestedRolloutSolver {
     pub fn eval(&mut self, root_path: &mut RootPath, mut state: State, depth: usize) -> Eval {
         // depth zero falls back to greedy
         if depth == self.max_depth {
-            return self.greedy.eval(root_path, state, &mut self.move_cache);
+            return self.greedy.eval(state, &mut self.move_cache);
         }
         if let Some(eval) = self.eval_caches[depth].get(&state) {
             return *eval;
