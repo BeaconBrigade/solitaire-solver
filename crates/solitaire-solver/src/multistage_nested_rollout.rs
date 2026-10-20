@@ -63,7 +63,12 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
             let actions = if depth < self.max_depth[h] {
                 &generate_moves(&state)
             } else {
-                // safety: don't question it- i'm lazy
+                // It's ok to borrow from move_cache because if we're on the
+                // last depth, we're greedy search and therefore, we don't
+                // recurse so we iterate through all actions in a row
+                // without touching the move_cache. Then take a new set of
+                // actions from the move_cache. So no reesizes or dangling
+                // pointers happen.
                 unsafe {
                     &*(match self.move_cache.get(&state) {
                         Some(a) => a,
@@ -84,8 +89,19 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
                 let eval = if depth < self.max_depth[h] {
                     self.eval(root_path, new, depth + 1, h)
                 } else {
-                    // if we're at our depth, just be greedy
-                    Eval::H(self.heuristics[h](&new, &actions))
+                    // second access to move_cache should be ok since reads
+                    // don't resize (allegedly). It checks the hashmap, and
+                    // moves the lru entry to the front of the head
+                    // just be switching pointers. No resizing (hopefully)
+                    let new_actions = match self.move_cache.get(&state) {
+                        Some(a) => a,
+                        None => {
+                            // don't add anything to the move_cache
+                            // cause that could invalidate the `actions`
+                            &generate_moves(&new)
+                        }
+                    };
+                    Eval::H(self.heuristics[h](&new, &new_actions))
                 };
                 if eval > max.0 {
                     max = (eval, Some(new));
@@ -95,27 +111,26 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
                     }
                 }
             }
-            // check if we have a local minimum and another heuristic
-            // the main difference from normal nested rollouts
-            if h + 1 < N && max.0 < Eval::H(self.heuristics[h](&state, &actions)) {
-                let eval = self.eval(root_path, state, 0, h + 1);
-                root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], eval);
-                return eval;
-            }
-            // // if it's a loss on the last heuristic, stop the rollout
-            // if max.0 == Eval::Loss && h + 1 == N {
-            //     let eval = Eval::H(self.heuristics[h](&state, &actions));
-            //     root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], eval);
-            //     return eval;
-            // }
-            if let Some(new) = max.1 {
-                state = new;
-            } else {
+            // check dead end or for a local min
+            if max.1.is_none()
+                || (h + 1 < N && max.0 < Eval::H(self.heuristics[h](&state, &actions)))
+            {
+                // check if we have a local minimum and another heuristic
+                // the main difference from normal nested rollouts
+                let eval = if h + 1 == N {
+                    Eval::H(self.heuristics[h](&state, &actions))
+                } else {
+                    // remove state off the root path
+                    root_path.pop();
+                    self.eval(root_path, state, 0, h + 1)
+                };
                 // we ran out of unexplored moves
-                let eval = Eval::H(self.heuristics[h](&state, &actions));
                 root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], eval);
                 return eval;
             }
+
+            // already checked we had a new state earlier
+            state = max.1.unwrap();
         }
 
         root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], Eval::Win);
