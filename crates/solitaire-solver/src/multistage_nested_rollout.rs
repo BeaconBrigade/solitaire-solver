@@ -93,7 +93,7 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
                     // don't resize (allegedly). It checks the hashmap, and
                     // moves the lru entry to the front of the head
                     // just be switching pointers. No resizing (hopefully)
-                    let new_actions = match self.move_cache.get(&state) {
+                    let new_actions = match self.move_cache.get(&new) {
                         Some(a) => a,
                         None => {
                             // don't add anything to the move_cache
