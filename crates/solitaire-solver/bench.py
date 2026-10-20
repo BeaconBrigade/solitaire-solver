@@ -219,7 +219,8 @@ def main():
 
                 pbar.set_postfix(
                     success=successes,
-                    fail=failures,
+                    timeout=timeouts,
+                    fail=failures-timeouts,
                     invalid=invalid_solutions
                 )
                 pbar.update(1)
