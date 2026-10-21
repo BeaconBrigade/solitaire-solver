@@ -39,22 +39,17 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
         // which heuristic we're on
         h: usize,
     ) -> Eval {
-        let horizon = root_path.len();
-
         // we already have this state cached for this depth and heuristic
         if let Some(eval) = self.eval_caches[h][depth].get(&state).copied() {
             // no more heuristics, use cached value
             if h + 1 == N {
-                root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], eval);
                 return eval;
             } else {
                 // use next heuristic
-                let eval = self.eval(root_path, state, 0, h + 1);
-                root_path.rollback_with_cache(horizon, &mut self.eval_caches[h][depth], eval);
-                return eval;
+                return self.eval(root_path, state, 0, h + 1);
             }
         }
-
+        let horizon = root_path.len();
         while !state.is_win() {
             root_path.insert(state);
 
@@ -117,7 +112,7 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
             {
                 // check if we have a local minimum and another heuristic
                 // the main difference from normal nested rollouts
-                let eval = if h + 1 == N {
+                let eval = if (h + 1 == N) || max.0 == Eval::Loss {
                     Eval::H(self.heuristics[h](&state, &actions))
                 } else {
                     // remove state off the root path
@@ -154,7 +149,6 @@ impl<const N: usize> Solver for MultistageNestedRolloutSolver<N> {
             }
             let eval = self.eval(root_path, new, 0, 0);
 
-            // self.caches[0].put(new, eval);
             if eval > max.0 {
                 max = (eval, Some(*a));
                 // early break for wins
