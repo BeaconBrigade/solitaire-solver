@@ -29,11 +29,6 @@ the paper).
 ### Extra Features:
 - Sorted tableau stacks; my solver sorts the tableau stacks to collapse the search space
 
-### Todo (outside of paper implementation)
-
-- I also want to try Levin tree search on the problem
-- Compare solvers against state of the art such as Solvitaire
-
 ## Bench
 
 There's a python script `crates/solitaire-solver/bench.py` which can use the `solitaire-solver` bin to test solvers using different configurations (such as nesting level) on
@@ -59,3 +54,18 @@ samply record ../../target/profiling/cli solve nested ../../decks/t -j 2
 ```
 
 The `profile.tar.gz` that are generated are already in the `.gitignore`.
+
+## Todo
+
+### gui
+
+- let users scroll through computer solution and play it back
+
+### paper implementation
+
+This is listed above in the _Solvers_ section.
+
+### outside of paper implementation
+
+- I also want to try Levin tree search on the problem
+- Compare solvers against state of the art such as Solvitaire
