@@ -4,8 +4,8 @@ Implementation of Klondike Solitaire and accompanying solvers. Contains an appli
 
 ## Solitaire
 
-In `crates/solitaire-game` there's an implementation of klondike solitaire as a library. It's a three draw mode. There's a GUI game version using [`macroquad`](https://crates.io/crates/macroquad),
-You can load and save deck shufflings to replay games. It also has undo so you can try different ways to complete the game. It lets you test out what the solvers do (currently it will
+In `crates/solitaire-game` there's an implementation of Klondike solitaire as a library. It's a three draw mode. There's a GUI game version using [`macroquad`](https://crates.io/crates/macroquad),
+You can load and save deck shuffles to replay games. It also has undo so you can try different ways to complete the game. It lets you test out what the solvers do (currently it will
 look weird since the solvers use a sorted tableau).
 
 ## Solvers
@@ -29,10 +29,15 @@ the paper).
 ### Extra Features:
 - Sorted tableau stacks; my solver sorts the tableau stacks to collapse the search space
 
+### Todo (outside of paper implementation)
+
+- I also want to try Levin tree search on the problem
+- Compare solvers against state of the art such as Solvitaire
+
 ## Bench
 
 There's a python script `crates/solitaire-solver/bench.py` which can use the `solitaire-solver` bin to test solvers using different configurations (such as nesting level) on
-randomly generated shufflings to test solver effictiveness. You can limit solvers to different timeouts and limit the jobs running (it runs multiple solvers at once to speed things up).
+randomly generated shuffles to test solver effictiveness. You can limit solvers to different timeouts and limit the jobs running (it runs multiple solvers at once to speed things up).
 The script then reports successes/failures and some summary stats on those (time taken, moves to solve, etc.).
 
 ```shell
