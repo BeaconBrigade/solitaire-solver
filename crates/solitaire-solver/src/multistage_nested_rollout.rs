@@ -56,26 +56,19 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
             let mut max = (Eval::Loss, None);
             // for now, only greedy gets to use the move cache
             let actions = if depth < self.max_depth[h] {
-                &generate_moves(&state)
+                generate_moves(&state)
             } else {
-                // It's ok to borrow from move_cache because if we're on the
-                // last depth, we're greedy search and therefore, we don't
-                // recurse so we iterate through all actions in a row
-                // without touching the move_cache. Then take a new set of
-                // actions from the move_cache. So no reesizes or dangling
-                // pointers happen.
-                unsafe {
-                    &*(match self.move_cache.get(&state) {
-                        Some(a) => a,
-                        None => {
-                            let actions = generate_moves(&state);
-                            self.move_cache.put(state, actions);
-                            self.move_cache.get(&state).unwrap()
-                        }
-                    } as *const Vec<Action>)
+                match self.move_cache.get(&state) {
+                    Some(a) => a,
+                    None => {
+                        let actions = generate_moves(&state);
+                        self.move_cache.put(state, actions);
+                        self.move_cache.get(&state).unwrap()
+                    }
                 }
+                .clone()
             };
-            for a in actions {
+            for a in &actions {
                 let new = state.apply_sorted(*a);
                 // we're repeating states
                 if root_path.contains(&new) {
@@ -84,19 +77,15 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
                 let eval = if depth < self.max_depth[h] {
                     self.eval(root_path, new, depth + 1, h)
                 } else {
-                    // second access to move_cache should be ok since reads
-                    // don't resize (allegedly). It checks the hashmap, and
-                    // moves the lru entry to the front of the head
-                    // just be switching pointers. No resizing (hopefully)
                     let new_actions = match self.move_cache.get(&new) {
                         Some(a) => a,
                         None => {
-                            // don't add anything to the move_cache
-                            // cause that could invalidate the `actions`
-                            &generate_moves(&new)
+                            let actions = generate_moves(&new);
+                            self.move_cache.put(new, actions);
+                            self.move_cache.get(&new).unwrap()
                         }
                     };
-                    Eval::H(self.heuristics[h](&new, &new_actions))
+                    Eval::H(self.heuristics[h](&new, new_actions))
                 };
                 if eval > max.0 {
                     max = (eval, Some(new));
