@@ -18,7 +18,7 @@ use solitaire_game::{
     common::{Coord, Location},
     deck::{Card, Deck},
 };
-use solitaire_solver::{greedy::GreedySolver, heuristic::h2, nested_rollout::NestedRolloutSolver};
+use solitaire_solver::{greedy::GreedySolver, heuristic::{h1, h2}, multistage_nested_rollout::MultistageNestedRolloutSolver, nested_rollout::NestedRolloutSolver};
 
 use crate::game::{
     kplus::{KPlusGame, SolveUserAction},
@@ -49,8 +49,8 @@ async fn main() {
     let mut next_mode = None;
     let mut save_path = "decks/".to_string();
     let mut selected_solver = 1;
-    const SOLVER_OPTIONS: &[&str; 2] = &["Greedy", "Nested"];
-    let mut nesting_level = 1;
+    const SOLVER_OPTIONS: &[&str; 3] = &["Greedy", "Nested", "Multistage"];
+    let mut nesting_level = [2, 1];
 
     loop {
         let background_colour = color_u8!(5, 133, 3, 255);
@@ -122,12 +122,20 @@ async fn main() {
                                 &mut selected_solver,
                             );
                             ui.separator();
-                            if selected_solver > 0 {
+                            if selected_solver > 1 {
                                 ui.combo_box(
                                     hash!(),
                                     "Nest level",
                                     &["0", "1", "2"],
-                                    &mut nesting_level,
+                                    &mut nesting_level[0],
+                                );
+                            }
+                            if selected_solver == 2 {
+                                ui.combo_box(
+                                    hash!(),
+                                    "Nest level",
+                                    &["0", "1", "2"],
+                                    &mut nesting_level[1],
                                 );
                             }
                             ui.separator();
@@ -187,7 +195,20 @@ async fn main() {
                                                     deck,
                                                     Box::new(NestedRolloutSolver::new(
                                                         50_000,
+                                                        nesting_level[0],
+                                                    )),
+                                                )))),
+                                                deck,
+                                            ));
+                                        }
+                                        2 => {
+                                            next_mode = Some(Mode::Game(
+                                                Box::new(K(executor::block_on(KPlusGame::new(
+                                                    deck,
+                                                    Box::new(MultistageNestedRolloutSolver::new(
+                                                        50_000,
                                                         nesting_level,
+                                                        [h1, h2],
                                                     )),
                                                 )))),
                                                 deck,
@@ -217,13 +238,26 @@ async fn main() {
                                                             d,
                                                             Box::new(NestedRolloutSolver::new(
                                                                 50_000,
-                                                                nesting_level,
+                                                                nesting_level[0],
                                                             )),
                                                         ),
                                                     ))),
                                                     d,
                                                 ));
                                             }
+                                        2 => {
+                                            next_mode = Some(Mode::Game(
+                                                Box::new(K(executor::block_on(KPlusGame::new(
+                                                    d,
+                                                    Box::new(MultistageNestedRolloutSolver::new(
+                                                        50_000,
+                                                        nesting_level,
+                                                        [h1, h2],
+                                                    )),
+                                                )))),
+                                                d,
+                                            ));
+                                        }
                                             _ => panic!("invalid solver"),
                                         },
                                         Err(e) => {
