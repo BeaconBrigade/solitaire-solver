@@ -101,6 +101,9 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
             {
                 // check if we have a local minimum and another heuristic
                 // the main difference from normal nested rollouts
+                // || max.0 == Eval::Loss isn't in the paper from what I can tell,
+                // but since I only return Loss on dead ends, I don't think
+                // using the next heuristic would be a good idea
                 let eval = if (h + 1 == N) || max.0 == Eval::Loss {
                     Eval::H(self.heuristics[h](&state, &actions))
                 } else {
