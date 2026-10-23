@@ -126,7 +126,7 @@ async fn main() {
                                 ui.combo_box(
                                     hash!(),
                                     "Nest level",
-                                    &["0", "1", "2"],
+                                    &["0", "1", "2", "3"],
                                     &mut nesting_level[0],
                                 );
                             }
