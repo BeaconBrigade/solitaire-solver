@@ -138,7 +138,7 @@ impl State {
     }
 
     /// Apply move and then sort the tableau piles
-    pub fn apply_sorted(&self, action: Action) -> Self {
+    pub fn apply_and_sort(&self, action: Action) -> Self {
         let mut new = self.apply(action);
         new.sort_piles();
         new
@@ -148,6 +148,26 @@ impl State {
     /// but not necessary for human play
     pub fn sort_piles(&mut self) {
         self.tableau.sort();
+    }
+
+    /// sorts the piles and returns a permuation array to reconstruct the state
+    pub fn sort_piles_perm(&mut self) -> [usize; 7] {
+        let mut idx = [0, 1, 2, 3, 4, 5, 6];
+
+        idx.sort_by_key(|i| self.tableau[*i]);
+        self.sort_piles();
+
+        idx
+    }
+
+    /// apply a move generated using a sorted state given by perm onto an unsorted
+    /// state.
+    pub fn unsort_with_perm(&mut self, perm: &[usize; 7]) {
+        let mut t = self.tableau.clone();
+        for (i, &p) in perm.iter().enumerate() {
+            t[p] = self.tableau[i];
+        }
+        self.tableau = t;
     }
 
     pub fn get(&self, pos: Coord) -> Option<Card> {

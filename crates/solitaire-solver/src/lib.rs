@@ -73,7 +73,7 @@ pub trait Solver {
             // remove extra stuff added by the solver in case they didn't remove everything
             root_path.rollback_to(horizon);
             moves.push(a);
-            game.do_move_sorted(a);
+            game.do_move_and_sort(a);
         }
 
         if game.state.is_win() {

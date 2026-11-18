@@ -48,7 +48,7 @@ impl Solver for GreedySolver {
     ) -> Option<Action> {
         let mut max = (isize::MIN, None);
         for a in actions {
-            let new = state.apply_sorted(*a);
+            let new = state.apply_and_sort(*a);
             // already been to this state in our path
             if root_path.contains(&new) {
                 continue;

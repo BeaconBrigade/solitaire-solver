@@ -36,15 +36,18 @@ pub struct KPlusGame {
     blank_texture: Texture2D,
 
     root_path: RootPath,
+    /// contains all the states in their sorted forms
+    sorted_root_path: RootPath,
 
     /// contains the thread searching for a move and a boolean to indicate if the engine
     /// should continue solving after a move is found.
     solver_move: Option<(bool, Arc<JoinHandle<Option<Action>>>)>,
     solver: Arc<Mutex<Box<dyn Solver + Send>>>,
+    solver_fn: Arc<dyn Fn() -> Box<dyn Solver + Send>>,
 }
 
 impl KPlusGame {
-    pub async fn new(deck: Deck, solver: Box<dyn Solver + Send>) -> Self {
+    pub async fn new(deck: Deck, solver_fn: Box<dyn Fn() -> Box<dyn Solver + Send>>) -> Self {
         let card_textures = initialize_card_textures().await;
         let blank_texture = load_texture(image::BLANK)
             .await
@@ -61,6 +64,13 @@ impl KPlusGame {
 
         let mut root_path = RootPath::new();
         root_path.insert(game.state);
+        let mut s = game.state;
+        s.sort_piles();
+        let mut sorted_root_path = RootPath::new();
+        sorted_root_path.insert(s);
+
+        let solver = solver_fn();
+        let solver_fn = Arc::from(solver_fn);
 
         Self {
             game,
@@ -72,8 +82,10 @@ impl KPlusGame {
             cursor_offset: Vec2::ZERO,
             card_data,
             root_path,
+            sorted_root_path,
             solver_move: None,
             solver: Arc::new(Mutex::new(solver)),
+            solver_fn,
         }
     }
 
@@ -100,6 +112,7 @@ impl KPlusGame {
             if let Some(game) = self.root_path.pop() {
                 self.game.state = game;
             }
+            self.sorted_root_path.pop();
             update_all_clickable(&self.game, &mut self.card_data);
         }
         if root_ui().button(
@@ -109,11 +122,19 @@ impl KPlusGame {
             },
             "Restart",
         ) {
-            if let Some(game) = self.root_path.first().copied() {
+            if let Some(mut game) = self.root_path.first().copied() {
+                // non sorted version
                 self.game.state = game;
                 self.root_path.clear();
                 self.root_path.insert(game);
+                // update sorted version
+                self.sorted_root_path.clear();
+                game.sort_piles();
+                self.sorted_root_path.insert(game);
                 self.card_data = initialize_card_data(&self.game);
+
+                // reset the solver cache
+                self.solver = Arc::new(Mutex::new((self.solver_fn)()));
             }
         }
         if root_ui().button(
@@ -220,6 +241,9 @@ impl KPlusGame {
                     self.game.do_move(Action::new(from_coord, to_coord));
                     if self.game != prev {
                         self.root_path.insert(prev.state);
+                        let mut s = prev.state;
+                        s.sort_piles();
+                        self.sorted_root_path.insert(s);
                     }
                     break;
                 }
@@ -422,6 +446,7 @@ impl KPlusGame {
                 self.game.state = game;
                 self.solver_move = None;
             }
+            self.sorted_root_path.pop(); // keep both root paths up to date
         }
         if root_ui().button(
             Vec2 {
@@ -430,12 +455,20 @@ impl KPlusGame {
             },
             "Restart",
         ) {
-            if let Some(game) = self.root_path.first().copied() {
+            if let Some(mut game) = self.root_path.first().copied() {
+                // non sorted
                 self.game.state = game;
                 self.root_path.clear();
                 self.root_path.insert(game);
+                // sorted
+                self.sorted_root_path.clear();
+                game.sort_piles();
+                self.sorted_root_path.insert(game);
                 self.card_data = initialize_card_data(&self.game);
                 self.solver_move = None;
+
+                // reset the solver cache
+                self.solver = Arc::new(Mutex::new((self.solver_fn)()));
             }
         }
         if root_ui().button(
@@ -465,11 +498,10 @@ impl KPlusGame {
             one_move_text,
         ) && self.solver_move.is_none()
         {
-            // trust me I won't double race
-            self.game.state.sort_piles();
             // we need to have a way to unsort the piles for display
-            let s = self.game.state.clone();
-            let mut rp = self.root_path.clone();
+            let mut s = self.game.state.clone();
+            s.sort_piles();
+            let mut rp = self.sorted_root_path.clone();
             let solver = self.solver.clone();
             // start move generation
             self.solver_move = Some((
@@ -487,22 +519,27 @@ impl KPlusGame {
         if let Some((keep_playing, handle)) = &self.solver_move {
             if handle.is_finished() {
                 // we should be the only one holding our handle after the Option::take
-                let keep_playing = *keep_playing; // load bearing copy
+                let mut keep_playing = *keep_playing; // load bearing copy
                 let handle = Arc::try_unwrap(self.solver_move.take().unwrap().1).unwrap();
                 let res = handle.join();
                 if let Ok(Some(a)) = res {
-                    self.game.do_move_sorted(a);
-                    // TODO: need to handle sorting
-                    // a = unsort(a)
-                    // self.game.do_move(a);
+                    let mut s = self.game.state;
+                    self.game.do_sorted_move(a);
                     self.root_path.insert(self.game.state);
+                    s = s.apply_and_sort(a);
+                    self.sorted_root_path.insert(s);
+                } else {
+                    // stop searching for moves if there aren't any
+                    self.solver_move = None;
+                    keep_playing = false;
                 }
 
                 // start looking for a new move also, no need to sort the piles because our player
                 // sorts the piles.
                 if keep_playing && !self.game.state.is_win() {
-                    let s = self.game.state.clone();
-                    let mut rp = self.root_path.clone();
+                    let mut s = self.game.state.clone();
+                    s.sort_piles();
+                    let mut rp = self.sorted_root_path.clone();
                     let solver = self.solver.clone();
                     self.solver_move = Some((
                         true,
@@ -534,14 +571,11 @@ impl KPlusGame {
             if let Some((keep_playing, _)) = &mut self.solver_move {
                 *keep_playing = !*keep_playing;
             } else {
-                // this is a pure copy paste
-                // trust me I won't double race
-                self.game.state.sort_piles();
-                // we need to have a way to unsort the piles for display
-                let s = self.game.state.clone();
-                let mut rp = self.root_path.clone();
+                let mut s = self.game.state.clone();
+                s.sort_piles();
+                let mut rp = self.sorted_root_path.clone();
                 let solver = self.solver.clone();
-                // start move generation
+                // start move generation on sorted copy
                 self.solver_move = Some((
                     true,
                     Arc::new(thread::spawn(move || {

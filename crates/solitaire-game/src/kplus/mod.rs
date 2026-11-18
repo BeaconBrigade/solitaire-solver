@@ -19,9 +19,20 @@ impl KPlusSolitaire {
         }
     }
 
-    /// play moves with a sorted tableau
-    pub fn do_move_sorted(&mut self, action: Action) {
-        self.state = self.state.apply_sorted(action);
+    /// play move and sort the tableau
+    pub fn do_move_and_sort(&mut self, action: Action) {
+        self.state = self.state.apply_and_sort(action);
+    }
+
+    /// apply a move generated for a sorted version of this state
+    pub fn do_sorted_move(&mut self, action: Action) {
+        let perm = self.state.sort_piles_perm();
+        // apply the action normally because we need to fix the tableau after
+        // if you did apply_sorted, the action is applied and the piles
+        // would be sorted again which would mean the perm matrix wouldn't
+        // necessarily unsort the piles
+        self.state = self.state.apply(action);
+        self.state.unsort_with_perm(&perm);
     }
 
     pub fn do_move(&mut self, action: Action) {

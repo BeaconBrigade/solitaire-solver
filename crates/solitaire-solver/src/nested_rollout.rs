@@ -43,7 +43,7 @@ impl NestedRolloutSolver {
             // for now, only greedy gets to use the move cache
             let actions = generate_moves(&state);
             for a in &actions {
-                let new = state.apply_sorted(*a);
+                let new = state.apply_and_sort(*a);
                 // we're repeating states
                 if root_path.contains(&new) {
                     continue;
@@ -87,7 +87,7 @@ impl Solver for NestedRolloutSolver {
     ) -> Option<Action> {
         let mut max = (Eval::Loss, None);
         for a in actions {
-            let new = state.apply_sorted(*a);
+            let new = state.apply_and_sort(*a);
             // already been to this state in our path
             if root_path.contains(&new) {
                 continue;

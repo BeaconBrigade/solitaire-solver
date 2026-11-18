@@ -18,7 +18,12 @@ use solitaire_game::{
     common::{Coord, Location},
     deck::{Card, Deck},
 };
-use solitaire_solver::{greedy::GreedySolver, heuristic::{h1, h2}, multistage_nested_rollout::MultistageNestedRolloutSolver, nested_rollout::NestedRolloutSolver};
+use solitaire_solver::{
+    greedy::GreedySolver,
+    heuristic::{h1, h2},
+    multistage_nested_rollout::MultistageNestedRolloutSolver,
+    nested_rollout::NestedRolloutSolver,
+};
 
 use crate::game::{
     kplus::{KPlusGame, SolveUserAction},
@@ -122,7 +127,7 @@ async fn main() {
                                 &mut selected_solver,
                             );
                             ui.separator();
-                            if selected_solver > 1 {
+                            if selected_solver > 0 {
                                 ui.combo_box(
                                     hash!(),
                                     "Nest level",
@@ -184,32 +189,34 @@ async fn main() {
                                                 // oh yeah, async baby
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     deck,
-                                                    Box::new(GreedySolver::new(50_000, h2)),
+                                                    Box::new(|| Box::new(GreedySolver::new(50_000, h2))),
                                                 )))),
                                                 deck,
                                             ));
                                         }
                                         1 => {
+                                            let nl = Box::leak(Box::new(nesting_level[0]));
                                             next_mode = Some(Mode::Game(
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     deck,
-                                                    Box::new(NestedRolloutSolver::new(
+                                                    Box::new(|| Box::new(NestedRolloutSolver::new(
                                                         50_000,
-                                                        nesting_level[0],
-                                                    )),
+                                                        *nl,
+                                                    ))),
                                                 )))),
                                                 deck,
                                             ));
                                         }
                                         2 => {
+                                            let nl = Box::leak(Box::new(nesting_level.clone()));
                                             next_mode = Some(Mode::Game(
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     deck,
-                                                    Box::new(MultistageNestedRolloutSolver::new(
+                                                    Box::new(|| Box::new(MultistageNestedRolloutSolver::new(
                                                         50_000,
-                                                        nesting_level,
+                                                        *nl,
                                                         [h1, h2],
-                                                    )),
+                                                    ))),
                                                 )))),
                                                 deck,
                                             ));
@@ -225,35 +232,37 @@ async fn main() {
                                                     Box::new(K(executor::block_on(
                                                         KPlusGame::new(
                                                             d,
-                                                            Box::new(GreedySolver::new(50_000, h2)),
+                                                            Box::new(|| Box::new(GreedySolver::new(50_000, h2))),
                                                         ),
                                                     ))),
                                                     d,
                                                 ));
                                             }
                                             1 => {
+                                                let nl = Box::leak(Box::new(nesting_level[0]));
                                                 next_mode = Some(Mode::Game(
                                                     Box::new(K(executor::block_on(
                                                         KPlusGame::new(
                                                             d,
-                                                            Box::new(NestedRolloutSolver::new(
+                                                            Box::new(|| Box::new(NestedRolloutSolver::new(
                                                                 50_000,
-                                                                nesting_level[0],
-                                                            )),
+                                                                *nl,
+                                                            ))),
                                                         ),
                                                     ))),
                                                     d,
                                                 ));
                                             }
                                         2 => {
+                                            let nl = Box::leak(Box::new(nesting_level.clone()));
                                             next_mode = Some(Mode::Game(
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     d,
-                                                    Box::new(MultistageNestedRolloutSolver::new(
+                                                    Box::new(|| Box::new(MultistageNestedRolloutSolver::new(
                                                         50_000,
-                                                        nesting_level,
+                                                        *nl,
                                                         [h1, h2],
-                                                    )),
+                                                    ))),
                                                 )))),
                                                 d,
                                             ));

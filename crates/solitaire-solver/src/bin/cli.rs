@@ -168,7 +168,7 @@ fn verify(deck_buf: String, solution_buf: String) {
     let solution: Solution = serde_json::from_str(&solution_buf).unwrap();
 
     for action in solution.moves {
-        game.do_move_sorted(action);
+        game.do_move_and_sort(action);
     }
 
     if game.state.is_win() {
