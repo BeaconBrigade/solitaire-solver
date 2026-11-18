@@ -16,11 +16,7 @@ impl GreedySolver {
         Self { h }
     }
 
-    pub fn eval(
-        &self,
-        state: State,
-        move_cache: &mut LruCache<State, Vec<Action>>,
-    ) -> Eval {
+    pub fn eval(&self, state: State, move_cache: &mut LruCache<State, Vec<Action>>) -> Eval {
         let actions = match move_cache.get(&state) {
             Some(a) => a,
             None => {
@@ -53,10 +49,7 @@ impl Solver for GreedySolver {
             if root_path.contains(&new) {
                 continue;
             }
-            let eval = self.eval(
-                new,
-                &mut LruCache::new(NonZeroUsize::new(1).unwrap()),
-            );
+            let eval = self.eval(new, &mut LruCache::new(NonZeroUsize::new(1).unwrap()));
             let h = match eval {
                 Eval::Loss => isize::MIN + 1,
                 Eval::Win => isize::MAX,
