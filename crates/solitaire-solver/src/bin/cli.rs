@@ -133,15 +133,17 @@ fn solve(deck: String, method: String, json: bool, n: Option<Vec<usize>>) {
         }
         "multistage" => {
             let now = Instant::now();
-            (
-                now,
-                MultistageNestedRolloutSolver::new(
-                    50_000,
-                    n.map(|n| [n[0], n[1]]).unwrap_or([1, 1]),
-                    [h1, h2],
-                )
-                .play_game(game),
-            )
+            let res = if let Some(n) = n {
+                if n.len() > 1 {
+                    MultistageNestedRolloutSolver::new(50_000, [n[0], n[1]], [h1, h2])
+                        .play_game(game)
+                } else {
+                    MultistageNestedRolloutSolver::new(50_000, [n[0]], [h2]).play_game(game)
+                }
+            } else {
+                MultistageNestedRolloutSolver::new(50_000, [1, 1], [h1, h2]).play_game(game)
+            };
+            (now, res)
         }
         _ => {
             print_method_not_found();

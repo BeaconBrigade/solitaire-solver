@@ -69,3 +69,4 @@ This is listed above in the _Solvers_ section.
 
 - I also want to try Levin tree search on the problem
 - Compare solvers against state of the art such as Solvitaire
+- make dominances (saw this in Solvitaire, but is a widely used method)

@@ -3,13 +3,14 @@ use std::{array, num::NonZeroUsize};
 use lru::LruCache;
 use solitaire_game::kplus::{action::Action, state::State};
 
-use crate::{move_generation::generate_moves, Eval, RootPath, Solver};
+use crate::{greedy::GreedySolver, move_generation::generate_moves, Eval, RootPath, Solver};
 
 pub struct MultistageNestedRolloutSolver<const N: usize> {
     eval_caches: [Vec<LruCache<State, Eval>>; N],
     heuristics: [fn(&State, &[Action]) -> isize; N],
     move_cache: LruCache<State, Vec<Action>>,
     max_depth: [usize; N],
+    greedys: [GreedySolver; N],
 }
 
 impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
@@ -28,6 +29,7 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
             heuristics,
             move_cache: LruCache::new(NonZeroUsize::new(capacity).unwrap()),
             max_depth,
+            greedys: heuristics.map(|h| GreedySolver::new(1, h)),
         }
     }
 
@@ -39,6 +41,10 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
         // which heuristic we're on
         h: usize,
     ) -> Eval {
+        // if we're at max depth, behave like greedy
+        if depth == self.max_depth[h] {
+            return self.greedys[h].eval(state, &mut self.move_cache);
+        }
         // we already have this state cached for this depth and heuristic
         if let Some(eval) = self.eval_caches[h][depth].get(&state).copied() {
             // no more heuristics, use cached value
@@ -54,20 +60,7 @@ impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
             root_path.insert(state);
 
             let mut max = (Eval::Loss, None);
-            // for now, only greedy gets to use the move cache
-            let actions = if depth < self.max_depth[h] {
-                generate_moves(&state)
-            } else {
-                match self.move_cache.get(&state) {
-                    Some(a) => a,
-                    None => {
-                        let actions = generate_moves(&state);
-                        self.move_cache.put(state, actions);
-                        self.move_cache.get(&state).unwrap()
-                    }
-                }
-                .clone()
-            };
+            let actions = generate_moves(&state);
             for a in &actions {
                 let new = state.apply_sorted(*a);
                 // we're repeating states
