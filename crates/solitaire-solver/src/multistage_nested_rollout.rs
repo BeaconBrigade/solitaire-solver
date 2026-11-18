@@ -13,7 +13,7 @@ pub struct MultistageNestedRolloutSolver<const N: usize> {
     greedys: [GreedySolver; N],
 }
 
-impl<'a, const N: usize> MultistageNestedRolloutSolver<N> {
+impl<const N: usize> MultistageNestedRolloutSolver<N> {
     pub fn new(
         capacity: usize,
         max_depth: [usize; N],
@@ -123,7 +123,7 @@ impl<const N: usize> Solver for MultistageNestedRolloutSolver<N> {
         &mut self,
         root_path: &mut RootPath,
         state: &State,
-        actions: &Vec<Action>,
+        actions: &[Action],
     ) -> Option<Action> {
         let mut max = (Eval::Loss, None);
         for a in actions {

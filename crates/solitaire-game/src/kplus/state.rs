@@ -163,7 +163,7 @@ impl State {
     /// apply a move generated using a sorted state given by perm onto an unsorted
     /// state.
     pub fn unsort_with_perm(&mut self, perm: &[usize; 7]) {
-        let mut t = self.tableau.clone();
+        let mut t = self.tableau;
         for (i, &p) in perm.iter().enumerate() {
             t[p] = self.tableau[i];
         }

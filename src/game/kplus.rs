@@ -499,7 +499,7 @@ impl KPlusGame {
         ) && self.solver_move.is_none()
         {
             // we need to have a way to unsort the piles for display
-            let mut s = self.game.state.clone();
+            let mut s = self.game.state;
             s.sort_piles();
             let mut rp = self.sorted_root_path.clone();
             let solver = self.solver.clone();
@@ -537,7 +537,7 @@ impl KPlusGame {
                 // start looking for a new move also, no need to sort the piles because our player
                 // sorts the piles.
                 if keep_playing && !self.game.state.is_win() {
-                    let mut s = self.game.state.clone();
+                    let mut s = self.game.state;
                     s.sort_piles();
                     let mut rp = self.sorted_root_path.clone();
                     let solver = self.solver.clone();
@@ -571,7 +571,7 @@ impl KPlusGame {
             if let Some((keep_playing, _)) = &mut self.solver_move {
                 *keep_playing = !*keep_playing;
             } else {
-                let mut s = self.game.state.clone();
+                let mut s = self.game.state;
                 s.sort_piles();
                 let mut rp = self.sorted_root_path.clone();
                 let solver = self.solver.clone();

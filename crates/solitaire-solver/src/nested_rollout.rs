@@ -83,7 +83,7 @@ impl Solver for NestedRolloutSolver {
         &mut self,
         root_path: &mut RootPath,
         state: &State,
-        actions: &Vec<Action>,
+        actions: &[Action],
     ) -> Option<Action> {
         let mut max = (Eval::Loss, None);
         for a in actions {

@@ -208,7 +208,7 @@ async fn main() {
                                             ));
                                         }
                                         2 => {
-                                            let nl = Box::leak(Box::new(nesting_level.clone()));
+                                            let nl = Box::leak(Box::new(nesting_level));
                                             next_mode = Some(Mode::Game(
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     deck,
@@ -254,7 +254,7 @@ async fn main() {
                                                 ));
                                             }
                                         2 => {
-                                            let nl = Box::leak(Box::new(nesting_level.clone()));
+                                            let nl = Box::leak(Box::new(nesting_level));
                                             next_mode = Some(Mode::Game(
                                                 Box::new(K(executor::block_on(KPlusGame::new(
                                                     d,
@@ -298,7 +298,7 @@ async fn main() {
                     let K(game) = &**game else {
                         panic!("game was standard version");
                     };
-                    next_mode = Some(Mode::Solve(game.clone(), *deck))
+                    next_mode = Some(Mode::Solve(Box::new(game.clone()), *deck))
                 }
                 SolveUserAction::None | SolveUserAction::Play => {}
             },
@@ -308,7 +308,7 @@ async fn main() {
                     mode = Mode::Menu;
                 }
                 SolveUserAction::Play => {
-                    next_mode = Some(Mode::Game(Box::new(K(game.clone())), *deck));
+                    next_mode = Some(Mode::Game(Box::new(K(*game.clone())), *deck));
                 }
                 SolveUserAction::None | SolveUserAction::Solve => {}
             },
@@ -335,7 +335,7 @@ fn save_deck(path: &str, deck: Deck) -> Result<(), String> {
 enum Mode {
     Menu,
     Game(Box<Game>, Deck),
-    Solve(KPlusGame, Deck),
+    Solve(Box<KPlusGame>, Deck),
 }
 
 #[derive(Clone)]

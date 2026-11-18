@@ -25,7 +25,7 @@ impl GreedySolver {
                 move_cache.get(&state).unwrap()
             }
         };
-        Eval::H((self.h)(&state, &actions))
+        Eval::H((self.h)(&state, actions))
     }
 }
 
@@ -40,7 +40,7 @@ impl Solver for GreedySolver {
         &mut self,
         root_path: &mut RootPath,
         state: &State,
-        actions: &Vec<Action>,
+        actions: &[Action],
     ) -> Option<Action> {
         let mut max = (isize::MIN, None);
         for a in actions {

@@ -52,7 +52,7 @@ pub trait Solver {
         &mut self,
         root_path: &mut RootPath,
         state: &State,
-        actions: &Vec<Action>,
+        actions: &[Action],
     ) -> Option<Action>;
 
     fn play_game(&mut self, mut game: KPlusSolitaire) -> Option<Solution> {
@@ -100,6 +100,10 @@ impl RootPath {
 
     pub fn len(&self) -> usize {
         self.history.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn contains(&self, state: &State) -> bool {
