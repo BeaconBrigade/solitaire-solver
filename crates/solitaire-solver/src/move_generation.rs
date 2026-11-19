@@ -52,12 +52,19 @@ pub fn generate_moves(state: &State) -> Vec<Action> {
         from.location = Location::Tableau(p as u8);
         for (i, card) in pile.0[pile.1 as usize..].iter().flatten().enumerate() {
             from.idx = pile.1 + i as u8;
+            // if the king is already at the base, it won't have any tableau moves
+            // maybe put this outside the loop
+            let tt = if from.idx == 0 && card.value == Value::King {
+                &[None; 7]
+            } else {
+                &tableau_targets
+            };
             find_moves(
                 &mut moves,
                 from,
                 card,
                 Some(&foundation_targets),
-                &tableau_targets,
+                tt,
             );
         }
     }
