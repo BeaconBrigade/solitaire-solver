@@ -244,7 +244,7 @@ def main():
     print(f"verified successes: {verified_successes}")
     print(f"invalid solutions: {invalid_solutions}")
 
-    p, lo, hi = win_rate_ci(successes, args.iterations)
+    p, lo, hi = win_rate_ci(successes, successes + failures)
     print(f"win rate: {p:.4f} ({p*100:.2f}%)")
     print(f"95% CI: [{lo:.4f}, {hi:.4f}] ({lo*100:.2f}% - {hi*100:.2f}%)")
     print()
